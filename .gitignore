@@ -1,0 +1,7 @@
+.trace
+build
+dist
+.vscode
+*.instrumented
+*.o
+node_modules
