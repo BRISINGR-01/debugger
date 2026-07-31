@@ -123,25 +123,32 @@ void process(int x)
 // ── main ─────────────────────────────────────────────────────────────────────
 int main()
 {
-    // Silence live stderr printing so the demo output is readable
-    // __recorder__.set_stderr_enabled(false);
 
-    int s = add(3, 4);
+    // int s = add(3, 4);
 
-    std::vector<double> nums = {1.0, 2.0, 3.0, 4.0, 5.0};
-    double avg = average(nums);
+    // std::vector<double> nums = {1.0, 2.0, 3.0, 4.0, 5.0};
+    // double avg = average(nums);
 
-    int d1 = divide_with_catch(10, 2);
-    int d2 = divide_with_catch(10, 0);
+    // int d1 = divide_with_catch(10, 2);
+    // int d2 = divide_with_catch(10, 0);
 
-    process(40);
-    process(60);
+    // process(40);
+    // process(60);
 
-    accumulate(1, 4);
-    // ── Dump the recorded history ─────────────────────────────────────────────
-    // std::cout << "\n──── Recorded History (" << __recorder__.snapshot().size()
-    //           << " events) ────\n";
-    // __recorder__.dump_history(std::cout);
+    // accumulate(1, 4);
+
+    if (int v = 0)
+    {
+        std::cout << "2" << std::endl;
+    }
+    else if (bool d = false) 
+    {
+        std::cout << "1" << std::endl;
+    }
+    else
+    {
+        std::cout << "0" << std::endl;
+    }
 
     return 0;
 }

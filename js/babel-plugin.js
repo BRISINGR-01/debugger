@@ -8,8 +8,8 @@
  * that object at runtime (see recorder-runtime.js).
  */
 
-const { NodePath } = require("@babel/traverse");
-const t = require("@babel/types");
+import { NodePath } from "@babel/traverse";
+import * as t from "@babel/types";
 
 // Unique id per transformed file to avoid name clashes
 let _uid = 0;
@@ -24,6 +24,14 @@ function emitCall(fields) {
       [t.objectExpression(fields)],
     ),
   );
+}
+
+function createVar(name, type, val) {
+  return t.objectExpression([
+    prop("name", strLiteral(name)),
+    prop("type", strLiteral(type)),
+    prop("value", t.cloneNode(val)),
+  ]);
 }
 
 function strLiteral(s) {
@@ -193,18 +201,21 @@ function getFuncName(path) {
   return "(anonymous)";
 }
 
-module.exports = function recorderPlugin({ types }) {
+export default function recorderPlugin({ types }) {
   return {
+    // pre(file) {
+    //   if (file.opts.filename.endsWith("recorder.js")) {
+    //     this.skip = true;
+    //   }
+    // },
     visitor: {
       // ── Functions ──────────────────────────────────────────────────────────
       FunctionDeclaration(path) {
         wrapFunctionBody(path, getFuncName(path));
       },
-
       FunctionExpression(path) {
         wrapFunctionBody(path, getFuncName(path));
       },
-
       ArrowFunctionExpression(path) {
         wrapFunctionBody(path, getFuncName(path));
       },
@@ -237,6 +248,15 @@ module.exports = function recorderPlugin({ types }) {
         if (path.node._instrumented) return;
         if (path.parent._instrumented) return;
 
+        // Skip declarations inside for (let x = ...; ...; ...) loops — insertAfter
+        // fails because the parent (ForStatement) is not an array container.
+        if (
+          t.isForStatement(path.parent) ||
+          t.isForInStatement(path.parent) ||
+          t.isForOfStatement(path.parent)
+        )
+          return;
+
         const { kind, declarations } = path.node;
         const stmtsToInsert = [];
 
@@ -244,11 +264,16 @@ module.exports = function recorderPlugin({ types }) {
           if (!t.isIdentifier(decl.id)) continue; // skip destructuring for now
           if (decl.init === null || decl.init === undefined) continue;
 
+          console.log(decl.id.name, kind, path.parent);
+
           stmtsToInsert.push(
             emitCall([
               prop("type", strLiteral("declare")),
-              prop("variable", strLiteral(`${kind} ${decl.id.name}`)),
-              prop("newValue", t.cloneNode(decl.id)),
+              prop(
+                "variable",
+                createVar(decl.id.name, kind, t.cloneNode(decl.id)),
+              ),
+              prop("fn_id", path.parent),
             ]),
           );
         }
@@ -315,10 +340,9 @@ module.exports = function recorderPlugin({ types }) {
           ),
           [
             t.objectExpression([
-              prop("type", strLiteral("assign")),
-              prop("variable", strLiteral(varName)),
+              prop("type", strLiteral("change")),
+              prop("variable", createVar(varName, "kind", t.cloneNode(left))),
               prop("oldValue", oldId),
-              prop("newValue", t.cloneNode(left)),
             ]),
           ],
         );
@@ -362,9 +386,8 @@ module.exports = function recorderPlugin({ types }) {
           [
             t.objectExpression([
               prop("type", strLiteral("assign")),
-              prop("variable", strLiteral(varName)),
+              prop("variable", createVar(varName, "kind", t.cloneNode(arg))),
               prop("oldValue", oldId),
-              prop("newValue", t.cloneNode(arg)),
             ]),
           ],
         );
@@ -376,4 +399,4 @@ module.exports = function recorderPlugin({ types }) {
       },
     },
   };
-};
+}

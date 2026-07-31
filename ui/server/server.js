@@ -13,7 +13,7 @@ app.use(express.json());
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -41,8 +41,8 @@ function broadcastLog(logString) {
 
     data.push(logString);
     wss.clients.forEach((client) => {
+      // 1 === WebSocket.OPEN
       if (client.readyState === 1) {
-        // 1 === WebSocket.OPEN
         client.send(logString);
       }
     });
@@ -51,10 +51,11 @@ function broadcastLog(logString) {
   }
 }
 
-app.post("/clear", clear);
+app.delete("/clear", clear);
 
 app.post("/log", (req, res) => {
   const logEntry = req.body;
+  console.log(logEntry);
 
   if (!logEntry || Object.keys(logEntry).length === 0) {
     return res

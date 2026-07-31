@@ -15,6 +15,13 @@
 #include <variant>
 #include <vector>
 
+struct Var
+{
+  std::string name;
+  std::string type;
+  std::string val;
+};
+
 // ── Value snapshot ────────────────────────────────────────────────────────────
 // We copy up to 16 bytes of a variable's raw memory at the moment of the event.
 // For pointer types we store the pointer value itself (not what it points to).
@@ -28,6 +35,7 @@ struct ValueSnapshot
   template <typename T>
   static ValueSnapshot from(const T &val, const char *tname)
   {
+    std::cout << "-" << typeid(val).name() << std::endl;
     ValueSnapshot s;
     s.type_name = tname;
     s.size = sizeof(T) <= 16 ? sizeof(T) : 16;
@@ -267,6 +275,7 @@ public:
     _history_sink = std::make_shared<HistorySink>();
     add_sink(_stderr_sink);
     add_sink(_history_sink);
+    set_stderr_enabled(false);
   }
 
   void add_sink(std::shared_ptr<IRecorderSink> s)
@@ -291,17 +300,14 @@ public:
     }
   }
 
-  // Main emit — called by generated instrumentation
   void emit(RecorderEvent ev)
   {
-    std::cout << "emit: " + ev.name << std::endl;
     std::lock_guard<std::mutex> g(_mtx);
     for (auto &s : _sinks)
       s->on_event(ev);
   }
 
   // ── Convenience helpers called by generated code ──────────────────────────
-
   void func_enter(const char *func, const char *file, int line,
                   std::vector<ArgInfo> args = {})
   {
@@ -481,19 +487,19 @@ inline Recorder &__recorder__ = Recorder::global();
 // ── RAII scope guard for functions (handles exits via exceptions) ──────────────
 struct FuncScopeGuard
 {
-  const char *func;
+  const char *fname;
   const char *file;
   int line;
   bool returned{false}; // set to true when an explicit return fires
 
-  FuncScopeGuard(const char *f, const char *fi, int l)
-      : func(f), file(fi), line(l)
+  FuncScopeGuard(const char *fn, const char *fi, int l)
+      : fname(fn), file(fi), line(l)
   {
   }
 
   ~FuncScopeGuard()
   {
     if (!returned)
-      __recorder__.func_exit(func, file, line);
+      __recorder__.func_exit(fname, file, line);
   }
 };

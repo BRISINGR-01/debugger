@@ -37,6 +37,9 @@ extern "C" int plugin_is_GPL_compatible;
 #include <string>
 #include <vector>
 
+#define R_ARGS(fname, file, line) escape(fname) << "\", \"" << file << "\", " << line
+#define R_END ");\n"
+
 using namespace clang;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -81,17 +84,7 @@ static std::string locStr(SourceLocation loc, const SourceManager &SM)
     PresumedLoc pl = SM.getPresumedLoc(loc);
     if (pl.isInvalid())
         return "";
-    std::string f = pl.getFilename();
-    // Escape backslashes (Windows paths)
-    std::string out;
-    for (char c : f)
-    {
-        if (c == '\\')
-            out += "\\\\";
-        else
-            out += c;
-    }
-    return out + ":" + std::to_string(pl.getLine());
+    return escape(pl.getFilename()) + ":" + std::to_string(pl.getLine());
 }
 
 class InstrumentVisitor : public RecursiveASTVisitor<InstrumentVisitor>
@@ -103,12 +96,11 @@ public:
     // ── Functions ─────────────────────────────────────────────────────────────
     bool VisitFunctionDecl(FunctionDecl *FD)
     {
-        // Only visit function definitions, skip declarations.
-        if (!FD->hasBody())
+        if (!FD->hasBody()) // Only visit function definitions, skip declarations.
             return true;
-        // Skip if already instrumented in this pass or if it's a compiler builtin.
-        if (FD->isImplicit())
+        if (FD->isImplicit()) // Skip if already instrumented in this pass or if it's a compiler builtin.
             return true;
+
         Stmt *body = FD->getBody();
         if (!body)
             return true;
@@ -121,20 +113,15 @@ public:
         if (!CS)
             return true;
 
-        std::string funcName = FD->getQualifiedNameAsString();
+        std::string fname = FD->getQualifiedNameAsString();
         std::string file = locStr(bodyStart, SM);
+        unsigned int line = SM.getPresumedLineNumber(bodyStart);
 
-        // ── Build func_enter call ────────────────────────────────────────────
         std::ostringstream entry;
-        entry << "\n  /* [recorder] func_enter */\n"
-              << "  FuncScopeGuard __rsg__(\"" << escape(funcName)
-              << "\", \"" << file << "\", "
-              << SM.getPresumedLineNumber(bodyStart) << ");\n"
+        entry << "  FuncScopeGuard __rsg__(\"" << R_ARGS(fname, file, line) << R_END
               << "  __recorder__.func_enter(\""
-              << escape(funcName) << "\", \"" << file << "\", "
-              << SM.getPresumedLineNumber(bodyStart);
+              << R_ARGS(fname, file, line);
 
-        // Parameters
         bool hasParams = false;
         for (const ParmVarDecl *P : FD->parameters())
         {
@@ -163,14 +150,14 @@ public:
             entry << "\n    }";
         }
 
-        entry << ");\n";
+        entry << R_END;
 
         // Insert after opening brace
         SourceLocation insertPt = CS->getLBracLoc().getLocWithOffset(1);
         RW.InsertTextAfter(insertPt, entry.str());
 
         // ── Wrap return statements ────────────────────────────────────────────
-        instrumentReturns(CS, FD, funcName);
+        instrumentReturns(CS, FD, fname);
 
         return true;
     }
@@ -187,7 +174,6 @@ public:
 
         for (auto *D : DS->decls())
         {
-
             VarDecl *VD = dyn_cast<VarDecl>(D);
             if (!VD)
                 continue;
@@ -270,7 +256,7 @@ public:
             std::ostringstream call;
             call << "\n  /* [recorder] try_enter */\n"
                  << "  __recorder__.try_enter(\""
-                 << escape(fname) << "\", \"" << file << "\", " << line << ");\n";
+                 << R_ARGS(fname, file, line) << R_END;
             RW.InsertTextAfter(tryBody->getLBracLoc().getLocWithOffset(1),
                                call.str());
         }
@@ -280,8 +266,8 @@ public:
         {
             CXXCatchStmt *CS = TS->getHandler(i);
             SourceLocation cloc = CS->getBeginLoc();
-            int cline = SM.getPresumedLineNumber(cloc);
-            std::string cfile = locStr(cloc, SM);
+            int line = SM.getPresumedLineNumber(cloc);
+            std::string file = locStr(cloc, SM);
 
             std::string exType = "...";
             std::string exVar;
@@ -298,7 +284,7 @@ public:
             std::ostringstream enterCall;
             enterCall << "\n  /* [recorder] catch_enter */\n"
                       << "  __recorder__.catch_enter(\""
-                      << escape(fname) << "\", \"" << cfile << "\", " << cline
+                      << R_ARGS(fname, file, line)
                       << ", \"" << escape(exType) << "\"";
             if (!exVar.empty())
             {
@@ -306,7 +292,7 @@ public:
                 // Otherwise just skip ex_what
                 enterCall << " /* ex: " << escape(exVar) << " */";
             }
-            enterCall << ");\n";
+            enterCall << R_END;
 
             SourceLocation insertPt =
                 catchBody->getLBracLoc().getLocWithOffset(1);
@@ -316,7 +302,7 @@ public:
             std::ostringstream exitCall;
             exitCall << "\n  /* [recorder] catch_exit */\n"
                      << "  __recorder__.catch_exit(\""
-                     << escape(fname) << "\", \"" << cfile << "\", " << cline << ");\n";
+                     << R_ARGS(fname, file, line) << R_END;
             RW.InsertTextBefore(catchBody->getRBracLoc(), exitCall.str());
         }
 
@@ -352,7 +338,7 @@ public:
 
         std::ostringstream replacement;
         replacement << "(__recorder__.throw_site(\""
-                    << escape(fname) << "\", \"" << file << "\", " << line
+                    << R_ARGS(fname, file, line)
                     << ", \"" << escape(exType) << "\"), "
                     << origText << ")";
 
@@ -385,9 +371,15 @@ public:
             ensureBraces(branch);
 
             std::ostringstream call;
+            if (VarDecl *var = IS->getConditionVariable())
+            {
+                if (FD)
+                    call << buildVarDeclCall(var, FD, var->getLocation());
+            }
+
             call << " __recorder__.branch_taken(\""
-                 << escape(fname) << "\", \"" << file << "\", " << line
-                 << ", \"" << label << "\");";
+                 << R_ARGS(fname, file, line)
+                 << ", \"" << label << '"' << R_END;
 
             if (!wasBraceless)
             {
@@ -476,8 +468,8 @@ public:
             std::ostringstream call;
             call << "\n  /* [recorder] var_change: " << pa.varName << " */\n"
                  << "  if (true) { __recorder__.var_change(\""
-                 << escape(pa.funcName) << "\", \"" << pa.file << "\", "
-                 << pa.line << ", \"" << escape(pa.varName) << "\", "
+                 << R_ARGS(pa.funcName, pa.file, pa.line) << ", \""
+                 << escape(pa.varName) << "\", "
                  << pa.varName << ", \"" << pa.typeName << "\"); }\n";
 
             RW.InsertTextAfter(stmtEnd, call.str());
@@ -560,9 +552,9 @@ private:
             //     __rsg__.returned = true;
             //     return __ret__; }
             std::ostringstream repl;
-            repl << "{ auto __ret_val__ = (" << rtext << ");\n"
+            repl << "{ auto __ret_val__ = (" << rtext << R_END
                  << "  __recorder__.func_return(\""
-                 << escape(fname) << "\", \"" << file << "\", " << line
+                 << R_ARGS(fname, file, line)
                  << ", __ret_val__, \"" << tname << "\");\n"
                  << "  " << markGuard << "\n"
                  << "  return __ret_val__; }";
@@ -574,7 +566,7 @@ private:
             // void return
             std::ostringstream repl;
             repl << "{ __recorder__.func_return_void(\""
-                 << escape(fname) << "\", \"" << file << "\", " << line << ");\n"
+                 << R_ARGS(fname, file, line) << R_END
                  << "  " << markGuard << " return; }";
             RW.ReplaceText(RS->getSourceRange(), repl.str());
         }
@@ -608,18 +600,18 @@ private:
 
         std::ostringstream call;
         call << " __recorder__.loop_iter(\""
-             << escape(fname) << "\", \"" << file << "\", " << line
-             << ", \"" << kind << "\");" << loopVar;
+             << R_ARGS(fname, file, line)
+             << ", \"" << kind << '"' << R_END << loopVar;
 
+        clang::SourceLocation beginLoc = body->getBeginLoc();
         if (!wasBraceless)
         {
             CompoundStmt *CS = dyn_cast<CompoundStmt>(body);
-            RW.InsertTextAfter(CS->getLBracLoc().getLocWithOffset(1), call.str());
+            beginLoc = CS->getLBracLoc().getLocWithOffset(1);
         }
-        else
-        {
-            RW.InsertTextAfter(body->getBeginLoc(), call.str());
-        }
+
+        RW.InsertTextAfter(beginLoc, call.str());
+
         return true;
     }
 
@@ -658,18 +650,17 @@ private:
 
         std::ostringstream call;
         call << " __recorder__.var_decl(\""
-             << escape(fname) << "\", \"" << file << "\", " << line
+             << R_ARGS(fname, file, line)
              << ", \"" << escape(vname) << "\", "
-             << vname << ", \"" << tname << "\");";
+             << vname << ", \"" << tname << '"' << R_END;
+
         return call.str();
     }
 
-    // Allow the consumer to inject a lookup function
 public:
+    // Allow the consumer to inject a lookup function
     std::function<FunctionDecl *(SourceLocation)> fnLookup;
 };
-
-// ── AST Consumer ─────────────────────────────────────────────────────────────
 
 class InstrumenterConsumer : public ASTConsumer
 {
@@ -747,8 +738,6 @@ private:
     CompilerInstance &CI;
     Rewriter RW;
 };
-
-// ── Plugin action ─────────────────────────────────────────────────────────────
 
 class InstrumenterAction : public PluginASTAction
 {

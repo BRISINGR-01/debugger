@@ -10,8 +10,6 @@
                   -std=c++17 -c main.cpp
  *   ./main.o
  */
-#include <cpptrace/cpptrace.hpp>
-
 #include <stdexcept>
 #include <string>
 #include <iostream>
@@ -92,9 +90,6 @@ int main()
         // caught
         printf("%s", e.what());
     }
-
-    auto a = cpptrace::generate_raw_trace().frames[0];
-    a ;
 
     return 0;
 }

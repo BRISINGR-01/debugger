@@ -2,6 +2,8 @@
 build
 dist
 .vscode
-*.instrumented
+*.instrumented*
+*instrumented.*
 *.o
 node_modules
+.debug

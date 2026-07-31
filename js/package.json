@@ -1,0 +1,20 @@
+{
+  "name": "js-instrumenter",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "instrument": "./instrument.js"
+  },
+  "dependencies": {
+    "@babel/core": "^8.0.1",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@babel/traverse": "^8.0.0",
+    "@types/node": "^26.1.2"
+  }
+}

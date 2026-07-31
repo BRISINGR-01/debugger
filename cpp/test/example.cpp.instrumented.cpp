@@ -21,9 +21,7 @@
 
 // ── Simple arithmetic ─────────────────────────────────────────────────────────
 int add(int a, int b)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("add", "example.cpp:24", 24);
+{  FuncScopeGuard __rsg__("add", "example.cpp:24", 24);
   __recorder__.func_enter("add", "example.cpp:24", 24,
     std::vector<ArgInfo>{
       ArgInfo{"a", ValueSnapshot::from(a, "int")},
@@ -31,6 +29,7 @@ int add(int a, int b)
     });
 
     int result = a + b; __recorder__.var_decl("add", "example.cpp:25", 25, "result", result, "int");
+
     { auto __ret_val__ = (result);
   __recorder__.func_return("add", "example.cpp:26", 26, __ret_val__, "int");
   __rsg__.returned = true; 
@@ -38,23 +37,26 @@ int add(int a, int b)
 }
 
 double average(const std::vector<double> &values)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("average", "example.cpp:30", 30);
+{  FuncScopeGuard __rsg__("average", "example.cpp:30", 30);
   __recorder__.func_enter("average", "example.cpp:30", 30,
     std::vector<ArgInfo>{
       ArgInfo{"values", ValueSnapshot::from(values, "const std::vector<double> &")}
     });
 
     if (bool mpty = values.empty())
-        {  __recorder__.branch_taken("average", "example.cpp:31", 31, "then");{ auto __ret_val__ = (0.0);
+        {  __recorder__.var_decl("average", "example.cpp:31", 31, "mpty", mpty, "_Bool");
+ __recorder__.branch_taken("average", "example.cpp:31", 31, "then");
+{ auto __ret_val__ = (0.0);
   __recorder__.func_return("average", "example.cpp:32", 32, __ret_val__, "double");
   __rsg__.returned = true; 
   return __ret_val__; } };
 
     double sum = 0.0; __recorder__.var_decl("average", "example.cpp:34", 34, "sum", sum, "double");
+
     for (double v : values)
-    { __recorder__.loop_iter("average", "example.cpp:35", 35, "for"); __recorder__.var_decl("average", "example.cpp:35", 35, "v", v, "double");
+    { __recorder__.loop_iter("average", "example.cpp:35", 35, "for");
+ __recorder__.var_decl("average", "example.cpp:35", 35, "v", v, "double");
+
         sum = sum + v;
   /* [recorder] var_change: sum */
   if (true) { __recorder__.var_change("average", "example.cpp:37", 37, "sum", sum, "double"); }
@@ -68,9 +70,7 @@ double average(const std::vector<double> &values)
 
 // ── Exception demo ────────────────────────────────────────────────────────────
 int safe_divide(int numerator, int denominator)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("safe_divide", "example.cpp:44", 44);
+{  FuncScopeGuard __rsg__("safe_divide", "example.cpp:44", 44);
   __recorder__.func_enter("safe_divide", "example.cpp:44", 44,
     std::vector<ArgInfo>{
       ArgInfo{"numerator", ValueSnapshot::from(numerator, "int")},
@@ -79,9 +79,11 @@ int safe_divide(int numerator, int denominator)
 
     if (denominator == 0)
     { __recorder__.branch_taken("safe_divide", "example.cpp:45", 45, "then");
+
         (__recorder__.throw_site("safe_divide", "example.cpp:47", 47, "std::invalid_argument"), throw std::invalid_argument("division by zero"));
     }
     int result = numerator / denominator; __recorder__.var_decl("safe_divide", "example.cpp:49", 49, "result", result, "int");
+
     { auto __ret_val__ = (result);
   __recorder__.func_return("safe_divide", "example.cpp:50", 50, __ret_val__, "int");
   __rsg__.returned = true; 
@@ -89,9 +91,7 @@ int safe_divide(int numerator, int denominator)
 }
 
 int divide_with_catch(int a, int b)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("divide_with_catch", "example.cpp:54", 54);
+{  FuncScopeGuard __rsg__("divide_with_catch", "example.cpp:54", 54);
   __recorder__.func_enter("divide_with_catch", "example.cpp:54", 54,
     std::vector<ArgInfo>{
       ArgInfo{"a", ValueSnapshot::from(a, "int")},
@@ -99,6 +99,7 @@ int divide_with_catch(int a, int b)
     });
 
     int result = 0; __recorder__.var_decl("divide_with_catch", "example.cpp:55", 55, "result", result, "int");
+
     try
     {
   /* [recorder] try_enter */
@@ -131,25 +132,28 @@ int divide_with_catch(int a, int b)
 
 // ── Branching ─────────────────────────────────────────────────────────────────
 std::string classify(int n)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("classify", "example.cpp:70", 70);
+{  FuncScopeGuard __rsg__("classify", "example.cpp:70", 70);
   __recorder__.func_enter("classify", "example.cpp:70", 70,
     std::vector<ArgInfo>{
       ArgInfo{"n", ValueSnapshot::from(n, "int")}
     });
 
     std::string label; __recorder__.var_decl("classify", "example.cpp:71", 71, "label", label, "std::string");
+
     if (n < 0)
     { __recorder__.branch_taken("classify", "example.cpp:72", 72, "then");
+
         label = "negative";
     }
-    else {  __recorder__.branch_taken("classify", "example.cpp:72", 72, "else");if (n == 0)
+    else {  __recorder__.branch_taken("classify", "example.cpp:72", 72, "else");
+if (n == 0)
     { __recorder__.branch_taken("classify", "example.cpp:76", 76, "then");
+
         label = "zero";
     }
     else
     { __recorder__.branch_taken("classify", "example.cpp:76", 76, "else");
+
         label = "positive";
     } }
     { auto __ret_val__ = (label);
@@ -160,9 +164,7 @@ std::string classify(int n)
 
 // ── Mutation / assignment chains ──────────────────────────────────────────────
 int accumulate(int start, int count)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("accumulate", "example.cpp:89", 89);
+{  FuncScopeGuard __rsg__("accumulate", "example.cpp:89", 89);
   __recorder__.func_enter("accumulate", "example.cpp:89", 89,
     std::vector<ArgInfo>{
       ArgInfo{"start", ValueSnapshot::from(start, "int")},
@@ -170,8 +172,11 @@ int accumulate(int start, int count)
     });
 
     int acc = start; __recorder__.var_decl("accumulate", "example.cpp:90", 90, "acc", acc, "int");
+
     for (int i = 0; i < count; ++i)
-    { __recorder__.loop_iter("accumulate", "example.cpp:91", 91, "for"); __recorder__.var_decl("accumulate", "example.cpp:91", 91, "i", i, "int");
+    { __recorder__.loop_iter("accumulate", "example.cpp:91", 91, "for");
+ __recorder__.var_decl("accumulate", "example.cpp:91", 91, "i", i, "int");
+
         acc = acc + i;
   /* [recorder] var_change: acc */
   if (true) { __recorder__.var_change("accumulate", "example.cpp:93", 93, "acc", acc, "int"); }
@@ -185,16 +190,15 @@ int accumulate(int start, int count)
 
 // ── Fibonacci (recursive) ─────────────────────────────────────────────────────
 long long fib(int n)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("fib", "example.cpp:100", 100);
+{  FuncScopeGuard __rsg__("fib", "example.cpp:100", 100);
   __recorder__.func_enter("fib", "example.cpp:100", 100,
     std::vector<ArgInfo>{
       ArgInfo{"n", ValueSnapshot::from(n, "int")}
     });
 
     if (n <= 1)
-        {  __recorder__.branch_taken("fib", "example.cpp:101", 101, "then");{ auto __ret_val__ = (static_cast<long long>(n));
+        {  __recorder__.branch_taken("fib", "example.cpp:101", 101, "then");
+{ auto __ret_val__ = (static_cast<long long>(n));
   __recorder__.func_return("fib", "example.cpp:102", 102, __ret_val__, "long long");
   __rsg__.returned = true; 
   return __ret_val__; } };
@@ -206,9 +210,7 @@ long long fib(int n)
 
 // ── Nested functions / void return ────────────────────────────────────────────
 void log_value(const char *name, int val)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("log_value", "example.cpp:108", 108);
+{  FuncScopeGuard __rsg__("log_value", "example.cpp:108", 108);
   __recorder__.func_enter("log_value", "example.cpp:108", 108,
     std::vector<ArgInfo>{
       ArgInfo{"name", ValueSnapshot::from(name, "const char *")},
@@ -218,54 +220,68 @@ void log_value(const char *name, int val)
 }
 
 void process(int x)
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("process", "example.cpp:112", 112);
+{  FuncScopeGuard __rsg__("process", "example.cpp:112", 112);
   __recorder__.func_enter("process", "example.cpp:112", 112,
     std::vector<ArgInfo>{
       ArgInfo{"x", ValueSnapshot::from(x, "int")}
     });
 
     int doubled = x * 2; __recorder__.var_decl("process", "example.cpp:113", 113, "doubled", doubled, "int");
+
     log_value("doubled", doubled);
     if (doubled > 100)
     { __recorder__.branch_taken("process", "example.cpp:115", 115, "then");
+
         { __recorder__.func_return_void("process", "example.cpp:117", 117);
   __rsg__.returned = true;  return; }; // early void return
     }
     int tripled = x * 3; __recorder__.var_decl("process", "example.cpp:119", 119, "tripled", tripled, "int");
+
     log_value("tripled", tripled);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
 int main()
-{
-  /* [recorder] func_enter */
-  FuncScopeGuard __rsg__("main", "example.cpp:125", 125);
+{  FuncScopeGuard __rsg__("main", "example.cpp:125", 125);
   __recorder__.func_enter("main", "example.cpp:125", 125);
 
-    // Silence live stderr printing so the demo output is readable
-    // __recorder__.set_stderr_enabled(false);
 
-    int s = add(3, 4); __recorder__.var_decl("main", "example.cpp:129", 129, "s", s, "int");
+    // int s = add(3, 4);
 
-    std::vector<double> nums = {1.0, 2.0, 3.0, 4.0, 5.0}; __recorder__.var_decl("main", "example.cpp:131", 131, "nums", nums, "std::vector<double>");
-    double avg = average(nums); __recorder__.var_decl("main", "example.cpp:132", 132, "avg", avg, "double");
+    // std::vector<double> nums = {1.0, 2.0, 3.0, 4.0, 5.0};
+    // double avg = average(nums);
 
-    int d1 = divide_with_catch(10, 2); __recorder__.var_decl("main", "example.cpp:134", 134, "d1", d1, "int");
-    int d2 = divide_with_catch(10, 0); __recorder__.var_decl("main", "example.cpp:135", 135, "d2", d2, "int");
+    // int d1 = divide_with_catch(10, 2);
+    // int d2 = divide_with_catch(10, 0);
 
-    process(40);
-    process(60);
+    // process(40);
+    // process(60);
 
-    accumulate(1, 4);
-    // ── Dump the recorded history ─────────────────────────────────────────────
-    // std::cout << "\n──── Recorded History (" << __recorder__.snapshot().size()
-    //           << " events) ────\n";
-    // __recorder__.dump_history(std::cout);
+    // accumulate(1, 4);
+
+    if (int v = 0)
+    { __recorder__.var_decl("main", "example.cpp:140", 140, "v", v, "int");
+ __recorder__.branch_taken("main", "example.cpp:140", 140, "then");
+
+        std::cout << "2" << std::endl;
+    }
+    else {  __recorder__.var_decl("main", "example.cpp:140", 140, "v", v, "int");
+ __recorder__.branch_taken("main", "example.cpp:140", 140, "else");
+if (bool d = false)
+    { __recorder__.var_decl("main", "example.cpp:144", 144, "d", d, "_Bool");
+ __recorder__.branch_taken("main", "example.cpp:144", 144, "then");
+
+        std::cout << "1" << std::endl;
+    }
+    else
+    { __recorder__.var_decl("main", "example.cpp:144", 144, "d", d, "_Bool");
+ __recorder__.branch_taken("main", "example.cpp:144", 144, "else");
+
+        std::cout << "0" << std::endl;
+    } }
 
     { auto __ret_val__ = (0);
-  __recorder__.func_return("main", "example.cpp:146", 146, __ret_val__, "int");
+  __recorder__.func_return("main", "example.cpp:153", 153, __ret_val__, "int");
   __rsg__.returned = true; 
   return __ret_val__; };
 }
