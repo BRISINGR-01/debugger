@@ -2,16 +2,32 @@ import { execSync } from "child_process";
 import path from "path";
 
 const jsPath = path.resolve(import.meta.dirname, "../../js/index.js");
-console.log(import.meta.dirname, jsPath);
+
+export function chooseInstrumenter(file) {
+  switch (path.extname(file)) {
+    case ".js":
+    case ".jsx":
+    case ".mjs":
+    case ".cjs":
+    case ".ts":
+    case ".tsx":
+    case ".mts":
+    case ".cts":
+      return instrumenters.js;
+
+    default:
+      return null;
+  }
+}
 
 const instrumenters = {
   js: {
-    prepare(dest) {
-      execSync(`node ${jsPath} prepareDest '${dest}'`);
+    prepare(src, dest) {
+      execSync(`node ${jsPath} prepareDest '${src}' '${dest}'`);
     },
     instrument(srcPath, targetPath, debugDir) {
       execSync(
-        `node ${jsPath} prepareDest '${srcPath}' '${targetPath}' '${debugDir}'`,
+        `node ${jsPath} instrument '${srcPath}' '${targetPath}' '${debugDir}'`,
       );
     },
   },

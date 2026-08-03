@@ -8,58 +8,60 @@ import {
   debugDirName,
   makeSymlink,
   processEntry,
+  removeDebugDir,
+  throttle,
 } from "./utils.js";
 import { run, killChild } from "./runner.js";
 import { watchChanges } from "./watcher.js";
-import instrumenters from "./instrumenters.js";
+import instrumenters, { chooseInstrumenter } from "./instrumenters.js";
 
-const { command, exclude, sourceDir, single, noRestart } = parseArgs(
-  process.argv,
-);
+const {
+  command,
+  exclude,
+  sourceDir,
+  single: singleRun,
+  noRestart,
+} = parseArgs(process.argv);
 
-const debugDir =
-  sourceDir === process.cwd()
-    ? path.resolve(sourceDir, debugDirName)
-    : sourceDir;
+const debugDir = path.resolve(sourceDir, debugDirName);
 
 setUp(sourceDir, debugDir, exclude);
 
 let child = run(command, debugDir);
-let restartTimer = null;
+child.on("exit", () => {
+  if (singleRun) {
+    // removeDebugDir(debugDir);
+    process.exit(0);
+  }
+});
 
-function throttle(cb) {
-  clearTimeout(restartTimer);
-  restartTimer = setTimeout(cb, 100);
-}
+const watcher = singleRun
+  ? null
+  : watchChanges({
+      sourceDir,
+      debugDir,
+      excludePatterns: exclude,
+      onChange: () => {
+        if (noRestart) return;
 
-const watcher =
-  !single &&
-  watchChanges({
-    sourceDir,
-    debugDir,
-    excludePatterns: exclude,
-    onChange: () => {
-      if (noRestart) return;
-
-      killChild(child);
-      throttle(() => (child = run(command, debugDir)));
-    },
-  });
+        killChild(child);
+        throttle(() => (child = run(command, debugDir)));
+      },
+    });
 
 process.on("SIGINT", async () => {
   killChild(child);
-  if (!single) await watcher.close();
+  if (watcher) await watcher.close();
+  removeDebugDir(debugDir);
   process.exit(0);
 });
 
 function setUp(sourceDir, debugDir, excludePatterns) {
-  if (fs.existsSync(debugDir)) {
-    fs.rmSync(debugDir, { recursive: true, force: true });
-  }
+  if (fs.existsSync(debugDir)) removeDebugDir(debugDir);
 
   fs.mkdirSync(debugDir, { recursive: true });
 
-  instrumenters.js.prepare(debugDir);
+  instrumenters.js.prepare(sourceDir, debugDir);
 
   const isExcluded = buildExcludeMatcher(sourceDir, excludePatterns);
 
@@ -68,10 +70,10 @@ function setUp(sourceDir, debugDir, excludePatterns) {
 
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const srcPath = path.resolve(dir, entry.name);
-      const relPath = path.relative(sourceDir, srcPath);
+      const fileRelPath = path.relative(sourceDir, srcPath);
 
-      if (isExcluded(relPath) || isExcluded(entry.name)) {
-        makeSymlink(srcPath, relPath, sourceDir, debugDir);
+      if (isExcluded(fileRelPath) || isExcluded(entry.name)) {
+        makeSymlink(srcPath, fileRelPath, debugDir);
         continue;
       }
 
@@ -80,7 +82,7 @@ function setUp(sourceDir, debugDir, excludePatterns) {
         continue;
       }
 
-      processEntry(srcPath, relPath, sourceDir, debugDir);
+      processEntry(srcPath, fileRelPath, debugDir);
     }
   }
 

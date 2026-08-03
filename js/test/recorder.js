@@ -1,1 +1,0 @@
-/home/alex/Desktop/VSC/debugger/js/recorder.js

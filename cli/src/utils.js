@@ -1,17 +1,7 @@
-import {
-  readdirSync,
-  mkdirSync,
-  symlinkSync,
-  rmSync,
-  existsSync,
-  copyFileSync,
-  readFileSync,
-  unlinkSync,
-  statSync,
-} from "fs";
-import { extname, resolve, relative, dirname, basename } from "path";
+import fs from "fs";
+import path from "path";
 import picomatch from "picomatch";
-import instrumenters from "./instrumenters.js";
+import instrumenters, { chooseInstrumenter } from "./instrumenters.js";
 
 export const debugDirName = ".debug";
 
@@ -29,9 +19,11 @@ export const debugDirName = ".debug";
 // };
 
 export function parseGitignore(dir) {
-  const p = resolve(dir, ".gitignore");
-  if (!existsSync(p)) return [];
-  return readFileSync(p, "utf8")
+  const p = path.resolve(dir, ".gitignore");
+  if (!fs.existsSync(p)) return [];
+
+  return fs
+    .readFileSync(p, "utf8")
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#") && !l.startsWith("!"))
@@ -39,37 +31,49 @@ export function parseGitignore(dir) {
 }
 
 export function buildExcludeMatcher(sourceDir, userPatterns) {
-  const always = ["**/node_modules/**", "**/.git/**", ".git/**"];
+  const always = [
+    "**/node_modules/**",
+    "**/.git/**",
+    ".git/**",
+    "**/__debugger__*",
+  ];
   const git = parseGitignore(sourceDir);
   const all = [...always, ...git, ...userPatterns];
   return all.length > 0 ? picomatch(all, { matchBase: true }) : () => false;
 }
 
-export function processEntry(srcPath, relPath, sourceDir, debugDir) {
-  const inst = instrumenters.js.instrument;
+export function processEntry(srcPath, fileRelPath, debugDir) {
+  const inst = chooseInstrumenter(fileRelPath);
+  if (!inst) return makeSymlink(srcPath, fileRelPath, debugDir);
 
-  if (!inst) return makeSymlink(srcPath, relPath, sourceDir, debugDir);
+  const targetPath = path.resolve(debugDir, fileRelPath);
+  const parent = path.dirname(targetPath);
+  fs.mkdirSync(parent, { recursive: true });
 
-  const targetPath = resolve(debugDir, relPath);
-  const parent = dirname(targetPath);
-  mkdirSync(parent, { recursive: true });
-
+  inst.instrument(srcPath, targetPath, debugDir);
   try {
-    inst(srcPath, targetPath, debugDir);
   } catch (error) {
     console.error(error);
-    console.info(`Skipped file "${relPath}"`);
+    console.info(`Skipped file "${fileRelPath}"`);
   }
 }
 
-export function makeSymlink(srcPath, relPath, sourceDir, debugDir) {
-  const targetPath = resolve(debugDir, relPath);
-  const parent = dirname(targetPath);
-  mkdirSync(parent, { recursive: true });
+export function makeSymlink(srcPath, relPath, debugDir) {
+  const targetPath = path.resolve(debugDir, relPath);
+  const parent = path.dirname(targetPath);
+  fs.mkdirSync(parent, { recursive: true });
 
-  const linkTarget = relative(parent, srcPath);
-  try {
-    unlinkSync(targetPath);
-  } catch {}
-  symlinkSync(linkTarget, targetPath);
+  const linkTarget = path.relative(parent, srcPath);
+  if (!fs.existsSync(linkTarget)) fs.symlinkSync(linkTarget, targetPath);
+}
+
+export function removeDebugDir(debugDir) {
+  fs.rmSync(debugDir, { recursive: true, force: true });
+}
+
+let restartTimer = null;
+
+export function throttle(cb) {
+  clearTimeout(restartTimer);
+  restartTimer = setTimeout(cb, 100);
 }

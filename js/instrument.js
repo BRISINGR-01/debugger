@@ -1,41 +1,73 @@
-#!/usr/bin/env node
-
 import fs from "fs";
 import path from "path";
 import { transformSync } from "@babel/core";
+function findPackageType(dir) {
+  const pkg = path.join(dir, "package.json");
 
-export default function instrumentFile(
-  input,
-  dest,
-  destRoot,
-  useECMAImport = true,
-) {
-  let isTS = input.endsWith(".ts");
+  if (fs.existsSync(pkg)) {
+    const json = JSON.parse(fs.readFileSync(pkg, "utf8"));
+    return json.type === "module" ? "module" : "commonjs";
+  }
 
-  const plugins = [new URL("./babel-plugin.js", import.meta.url).pathname];
+  return "module";
+}
 
-  if (isTS) plugins.unshift("@babel/plugin-syntax-typescript");
+export default function instrumentFile(input, dest, destRoot) {
+  const source = fs.readFileSync(input, "utf8");
 
-  const src = fs.readFileSync(input, "utf8");
-
-  const result = transformSync(src, {
+  const result = transformSync(source, {
     filename: input,
-    plugins,
+
+    // Let Babel determine whether this is ESM or CommonJS.
+    sourceType: "unambiguous",
+
+    plugins: [
+      [
+        new URL("./babel-plugin.js", import.meta.url).pathname,
+        {
+          moduleType: findPackageType(destRoot),
+          runtime: "__debug_recorder",
+        },
+      ],
+    ],
+
     parserOpts: {
-      plugins: isTS ? ["typescript"] : [],
+      sourceType: "auto",
+
+      // Parse as much modern syntax as possible without relying on file extensions.
+      plugins: [
+        "jsx",
+        "typescript",
+        "importMeta",
+        "dynamicImport",
+        "topLevelAwait",
+        "classProperties",
+        "classPrivateProperties",
+        "classPrivateMethods",
+        "optionalChaining",
+        "nullishCoalescingOperator",
+        "logicalAssignment",
+        "numericSeparator",
+        "objectRestSpread",
+      ],
+
+      errorRecovery: true,
+      allowReturnOutsideFunction: true,
+      allowAwaitOutsideFunction: true,
     },
-    // Preserve original formatting as much as possible
-    retainLines: false,
+
+    babelrc: false,
+    configFile: false,
+    comments: true,
     compact: false,
+    retainLines: false,
+    sourceMaps: false,
   });
 
-  if (!result || !result.code)
+  if (!result?.code) {
     throw new Error(`Couldn't instrument "${input}"`);
+  }
 
-  const importPath = path.resolve(destRoot, "recorder.js");
-  const runtimeRequire = useECMAImport
-    ? `import "${importPath}";`
-    : `require("${importPath}");`;
-
-  fs.writeFileSync(dest, runtimeRequire + result.code);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, result.code, "utf8");
 }

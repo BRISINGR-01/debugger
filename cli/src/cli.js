@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import path from "node:path";
 
 export function parseArgs(argv) {
   const program = new Command();
@@ -30,10 +31,19 @@ export function parseArgs(argv) {
 
   const opts = program.opts();
 
+  let sourceDir;
+  if (opts.path) {
+    sourceDir = path.isAbsolute(opts.path)
+      ? opts.path
+      : path.resolve(process.cwd(), opts.path);
+  } else {
+    sourceDir = process.cwd();
+  }
+
   return {
     command: program.args.join(" "),
     exclude: opts.exclude,
-    sourceDir: opts.path || process.cwd(),
+    sourceDir,
     single: opts.single,
     noRestart: opts.noRestart,
   };

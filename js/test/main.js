@@ -1,5 +1,4 @@
-import add from "./util";
-import "../src/recorder-runtime";
+// import add from "./util";
 
 class SomeClass {
   rw() {
@@ -14,7 +13,7 @@ function c(s) {
 
 function main() {
   let b = 9;
-  const add_res = add(b, 9);
+  // const add_res = add(b, 9);
   b++;
   err(b);
   b = 11;

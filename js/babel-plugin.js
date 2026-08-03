@@ -201,14 +201,69 @@ function getFuncName(path) {
   return "(anonymous)";
 }
 
+function isModuleExport(node, t) {
+  if (!t.isMemberExpression(node)) return false;
+
+  // module.exports
+  if (
+    t.isIdentifier(node.object, { name: "module" }) &&
+    t.isIdentifier(node.property, { name: "exports" })
+  ) {
+    return true;
+  }
+
+  // exports.foo
+  if (t.isIdentifier(node.object, { name: "exports" })) {
+    return true;
+  }
+
+  // module.exports.foo
+  if (
+    t.isMemberExpression(node.object) &&
+    t.isIdentifier(node.object.object, { name: "module" }) &&
+    t.isIdentifier(node.object.property, { name: "exports" })
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export default function recorderPlugin({ types }) {
   return {
-    // pre(file) {
-    //   if (file.opts.filename.endsWith("recorder.js")) {
-    //     this.skip = true;
-    //   }
-    // },
     visitor: {
+      Program(path, state) {
+        const moduleName = "__debugger_recorder";
+        const moduleType = state.opts.moduleType;
+
+        // Avoid duplicate injection
+        if (
+          path.node.body.some(
+            (node) =>
+              t.isImportDeclaration(node) && node.source.value === moduleName,
+          )
+        )
+          return;
+
+        if (moduleType === "module") {
+          // ESM
+          path.unshiftContainer(
+            "body",
+            t.importDeclaration([], t.stringLiteral(moduleName)),
+          );
+        } else {
+          // CommonJS
+          path.unshiftContainer(
+            "body",
+            t.expressionStatement(
+              t.callExpression(t.identifier("require"), [
+                t.stringLiteral(moduleName),
+              ]),
+            ),
+          );
+        }
+      },
+
       // ── Functions ──────────────────────────────────────────────────────────
       FunctionDeclaration(path) {
         wrapFunctionBody(path, getFuncName(path));
@@ -264,8 +319,6 @@ export default function recorderPlugin({ types }) {
           if (!t.isIdentifier(decl.id)) continue; // skip destructuring for now
           if (decl.init === null || decl.init === undefined) continue;
 
-          console.log(decl.id.name, kind, path.parent);
-
           stmtsToInsert.push(
             emitCall([
               prop("type", strLiteral("declare")),
@@ -273,7 +326,7 @@ export default function recorderPlugin({ types }) {
                 "variable",
                 createVar(decl.id.name, kind, t.cloneNode(decl.id)),
               ),
-              prop("fn_id", path.parent),
+              // prop("fn_id", path.parent),
             ]),
           );
         }
@@ -288,7 +341,11 @@ export default function recorderPlugin({ types }) {
         if (path.node._instrumented) return;
 
         const left = path.node.left;
-        if (!t.isIdentifier(left) && !t.isMemberExpression(left)) return;
+        if (
+          !(t.isIdentifier(left) || t.isMemberExpression(left)) ||
+          isModuleExport(left, t)
+        )
+          return;
 
         // Only track identifiers and simple member expressions (this.x, obj.prop)
         let varName;

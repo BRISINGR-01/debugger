@@ -51,7 +51,10 @@ function broadcastLog(logString) {
   }
 }
 
-app.delete("/clear", clear);
+app.delete("/clear", (req, res) => {
+  clear();
+  return res.json({ status: "success" });
+});
 
 app.post("/log", (req, res) => {
   const logEntry = req.body;
