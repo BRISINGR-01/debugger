@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import path from "path";
 
-const jsPath = path.resolve(import.meta.dirname, "../../js/index.js");
+const jsPath = path.resolve(import.meta.dirname, "../../../js/src/index.js");
 
 export function chooseInstrumenter(file) {
   switch (path.extname(file)) {
@@ -26,9 +26,13 @@ const instrumenters = {
       execSync(`node ${jsPath} prepareDest '${src}' '${dest}'`);
     },
     instrument(srcPath, targetPath, debugDir) {
-      execSync(
-        `node ${jsPath} instrument '${srcPath}' '${targetPath}' '${debugDir}'`,
-      );
+      try {
+        execSync(
+          `node ${jsPath} instrument '${srcPath}' '${targetPath}' '${debugDir}'`,
+        );
+      } catch {
+        process.exit(1);
+      }
     },
   },
 };

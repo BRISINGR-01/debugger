@@ -15,10 +15,13 @@ function main() {
   let b = 9;
   // const add_res = add(b, 9);
   b++;
-  err(b);
   b = 11;
 
+  "1".replace("1", "2");
   let d = [1, 4, 6].map((x) => c(c(c(x))));
+  console.log(d);
+
+  err(b);
 }
 
 function err(a) {
@@ -29,4 +32,3 @@ function err(a) {
 }
 
 main();
-js2();

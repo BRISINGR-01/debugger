@@ -1,9 +1,13 @@
 import { ChevronRight, ChevronDown } from "lucide-react";
-import { TimeTrack } from "./TimeTrack";
-import { AssignRow } from "./AssignRow";
-import { frameHasMatch } from "../utils/search";
-import { fmtArgs } from "../utils/format";
+import { TimeTrack } from "./TimeTrack.jsx";
+import { AssignRow } from "./AssignRow.js";
+import { frameHasMatch } from "../utils/search.js";
+import { fmtArgs } from "../utils/format.ts";
 import "../App.css";
+import type { FnNode } from "../utils/FnTree.ts";
+import type { Id } from "../../../../json-spec.ts";
+import type FnTree from "../utils/FnTree.ts";
+import FnExit from "./FnExit.tsx";
 
 const DEPTH_COLORS = [
   "#5b8dee",
@@ -16,6 +20,7 @@ const DEPTH_COLORS = [
 
 export function FrameNode({
   node,
+  tree,
   depth,
   minTime,
   maxTime,
@@ -23,6 +28,16 @@ export function FrameNode({
   search,
   collapsed,
   toggle,
+}: {
+  node: FnNode;
+  tree: FnTree;
+  depth: number;
+  minTime: number;
+  maxTime: number;
+  currentTime: number;
+  search: string;
+  collapsed: Set<Id>;
+  toggle: (id: Id) => void;
 }) {
   const color = DEPTH_COLORS[depth % DEPTH_COLORS.length];
   const isCollapsedByUser = collapsed.has(node.id);
@@ -35,19 +50,18 @@ export function FrameNode({
       node.args.some(
         (a) =>
           a.name.toLowerCase().includes(search.toLowerCase()) ||
-          String(a.val).toLowerCase().includes(search.toLowerCase()),
+          String(a.value).toLowerCase().includes(search.toLowerCase()),
       ));
 
-  const started = node.enterTime <= currentTime;
+  const started = node.time <= currentTime;
   const ended = node.exitTime !== null && node.exitTime <= currentTime;
   const running = started && !ended;
   const notYet = !started;
-  const crashed = node.exitTime === null && node.enterTime < maxTime;
+  const crashed = node.exitTime === null && node.time < maxTime;
 
-  const varCount = node.timeline.filter((t) => t.kind !== "call").length;
-  const callCount = node.timeline.filter((t) => t.kind === "call").length;
-  const duration =
-    node.exitTime !== null ? node.exitTime - node.enterTime : null;
+  const varCount = node.timeline.filter((t) => t.event !== "call").length;
+  const callCount = node.timeline.filter((t) => t.event === "call").length;
+  const duration = node.exitTime !== null ? node.exitTime - node.time : null;
 
   return (
     <div
@@ -99,7 +113,7 @@ export function FrameNode({
         <TimeTrack
           min={minTime}
           max={maxTime}
-          start={node.enterTime}
+          start={node.time}
           end={node.exitTime ?? maxTime}
           color={color}
         />
@@ -107,11 +121,12 @@ export function FrameNode({
 
       {!effectiveCollapsed && (
         <div className="te-frame-body">
-          {node.timeline.map((item, i) =>
-            item.kind === "call" ? (
+          {node.timeline.map((ev) =>
+            ev.event === "enter" ? (
               <FrameNode
-                key={item.node.id + i}
-                node={item.node}
+                key={ev.fn_id}
+                node={tree.nodes[ev.fn_id]}
+                tree={tree}
                 depth={depth + 1}
                 minTime={minTime}
                 maxTime={maxTime}
@@ -120,23 +135,25 @@ export function FrameNode({
                 collapsed={collapsed}
                 toggle={toggle}
               />
-            ) : (
+            ) : ev.event === "change" ||
+              ev.event === "declare" ||
+              ev.event === "exit" ? (
               <AssignRow
-                key={item.variable + item.time}
-                item={item}
-                dim={item.time > currentTime}
+                key={ev.time}
+                event={ev}
+                dim={ev.time > currentTime}
                 active={
-                  Math.abs(item.time - currentTime) < 1.5 ||
-                  (item.time <= currentTime &&
+                  Math.abs(ev.time - currentTime) < 1.5 ||
+                  (ev.time <= currentTime &&
                     !node.timeline.some(
                       (o) =>
-                        o.kind !== "call" &&
-                        o.time > item.time &&
+                        o.event !== "call" &&
+                        o.time > ev.time &&
                         o.time <= currentTime,
                     ))
                 }
               />
-            ),
+            ) : null,
           )}
         </div>
       )}

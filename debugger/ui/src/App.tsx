@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   Play,
   Pause,
@@ -9,31 +9,31 @@ import {
   Trash2,
   Radio,
 } from "lucide-react";
-import { buildForest } from "./utils/buildForest";
-import { StatusDot } from "./components/StatusDot";
-import { FrameNode } from "./components/FrameNode";
+import FnTree, { type FnNode } from "./utils/FnTree.ts";
+import { StatusDot } from "./components/StatusDot.tsx";
+import { FrameNode } from "./components/FrameNode.tsx";
 import "./App.css";
 import "./index.css";
-import { useWebSocket } from "./hooks/useWebSocket";
+import { useWebSocket } from "./hooks/useWebSocket.ts";
 import { usePlayback } from "./hooks/usePlayback";
+import type { Id } from "../../../json-spec.ts";
 
 const WS_URL = "ws://localhost:8000/ws";
 
 export default function TraceExplorer() {
   const [search, setSearch] = useState("");
-  const [collapsed, setCollapsed] = useState(() => new Set());
+  const [collapsed, setCollapsed] = useState(() => new Set<Id>());
   const [currentTime, setCurrentTime] = useState(0);
   const [liveFollow, setLiveFollow] = useState(true);
   const [playing, setPlaying] = useState(false);
-  const rafRef = useRef(null);
 
   const { events, setEvents, status } = useWebSocket();
-  console.log(events);
+  console.log("events", events);
 
-  const { roots } = useMemo(() => buildForest(events), [events]);
-  console.log(roots);
+  const tree = useMemo(() => new FnTree(events), [events]);
+  console.log("root", tree);
 
-  const toggle = useCallback((id) => {
+  const toggle = useCallback((id: Id) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -44,7 +44,7 @@ export default function TraceExplorer() {
 
   const warnEvent = [...events].reverse().find((e) => e.event === "warn");
 
-  const times = events.map((e) => e.time).filter((t) => typeof t === "number");
+  const times = events.map((e) => e.time);
   const minTime = times.length ? Math.min(...times) : 0;
   const maxTime = times.length ? Math.max(...times) : 0;
 
@@ -52,7 +52,6 @@ export default function TraceExplorer() {
     if (liveFollow) setCurrentTime(maxTime);
   }, [maxTime, liveFollow]);
 
-  const PLAY_DURATION_MS = 7000;
   usePlayback(
     playing,
     currentTime,
@@ -120,13 +119,7 @@ export default function TraceExplorer() {
         <button
           className="te-btn"
           onClick={() => {
-            const all = new Set();
-            const walk = (n) => {
-              if (n.timeline.some((t) => t.kind === "call")) all.add(n.id);
-              n.timeline.forEach((t) => t.kind === "call" && walk(t.node));
-            };
-            roots.forEach(walk);
-            setCollapsed(all);
+            setCollapsed(new Set(Object.keys(tree.nodes)));
           }}
         >
           Collapse all
@@ -211,19 +204,18 @@ export default function TraceExplorer() {
             </div>
           </div>
 
-          {roots.map((root) => (
-            <FrameNode
-              key={root.id}
-              node={root}
-              depth={0}
-              minTime={minTime}
-              maxTime={maxTime}
-              currentTime={currentTime}
-              search={search}
-              collapsed={collapsed}
-              toggle={toggle}
-            />
-          ))}
+          <FrameNode
+            key={tree.root.id}
+            tree={tree}
+            node={tree.root}
+            depth={0}
+            minTime={minTime}
+            maxTime={maxTime}
+            currentTime={currentTime}
+            search={search}
+            collapsed={collapsed}
+            toggle={toggle}
+          />
 
           {warnEvent && currentTime >= warnEvent.time && (
             <div className="te-warn-banner">

@@ -1,4 +1,6 @@
-export function StatusDot({ status }) {
+import type { Status } from "../types";
+
+export function StatusDot({ status }: { status: Status }) {
   const map = {
     connecting: { color: "#e8a33d", label: "connecting\u2026" },
     open: { color: "#6fcf97", label: "connected" },

@@ -27,13 +27,7 @@ const debugDir = path.resolve(sourceDir, debugDirName);
 
 setUp(sourceDir, debugDir, exclude);
 
-let child = run(command, debugDir);
-child.on("exit", () => {
-  if (singleRun) {
-    // removeDebugDir(debugDir);
-    process.exit(0);
-  }
-});
+const child = run(command, debugDir);
 
 const watcher = singleRun
   ? null

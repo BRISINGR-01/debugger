@@ -23,7 +23,7 @@ export default function instrumentFile(input, dest, destRoot) {
 
     plugins: [
       [
-        new URL("./babel-plugin.js", import.meta.url).pathname,
+        new URL("./plugin/babel-plugin.js", import.meta.url).pathname,
         {
           moduleType: findPackageType(destRoot),
           runtime: "__debug_recorder",

@@ -133,4 +133,4 @@ function clear() {
 }
 
 // Fire up the file system monitoring engine alongside the listening routes
-startFileWatcher();
+// startFileWatcher();

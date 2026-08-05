@@ -30,27 +30,12 @@ function now() {
 class Recorder {
   #startTime;
   #setupPromise = null;
-  #queue = [];
+  queue = [];
+  #id = 0;
 
   constructor(sink) {
     this.sink = sink;
     this.#startTime = now();
-  }
-
-  /**
-   * Explicitly configure the singleton with a specific sink. Must be called
-   * (if at all) before anything else touches getRecorder()/instance(),
-   * otherwise it throws to avoid silently swapping sinks mid-run.
-   */
-  static configure(sink) {
-    if (globalThis[GLOBAL_KEY]) {
-      throw new Error(
-        "Recorder is already configured. Call Recorder.instance() to reuse it, " +
-          "or Recorder.reset() (tests only) before reconfiguring.",
-      );
-    }
-    globalThis[GLOBAL_KEY] = new Recorder(sink);
-    return globalThis[GLOBAL_KEY];
   }
 
   /**
@@ -76,6 +61,7 @@ class Recorder {
       sink?.setUp();
       globalThis[GLOBAL_KEY] = new Recorder(sink);
     }
+
     return globalThis[GLOBAL_KEY];
   }
 
@@ -85,42 +71,35 @@ class Recorder {
   }
 
   async flush() {
-    while (this.#queue.length) {
-      await this.sink.send(this.#queue.shift());
+    while (this.queue.length) {
+      await this.sink.send(this.queue.shift());
     }
-  }
-
-  /** Idempotent setup: safe to call from many call sites/files. */
-  setUp() {
-    if (!this.#setupPromise) {
-      this.#setupPromise = Promise.resolve(this.sink.setUp());
-    }
-    return this.#setupPromise;
   }
 
   emit(event) {
+    if (event.variable) {
+      event.variable.value = JSON.stringify(event.variable.value);
+    }
+    if (event.oldValue) {
+      event.oldValue = JSON.stringify(event.oldValue);
+    }
+
     const ev = {
       time: +(now() - this.#startTime).toFixed(3),
       ...event,
     };
-    this.#queue.push(ev);
+    this.queue.push(ev);
   }
 
-  parseObject(obj) {
-    let newVal = JSON.stringify(obj);
-
-    if (obj && typeof obj === "object" && obj.constructor.name !== "Object") {
-      newVal = obj.constructor.name + "{}";
-    }
-
-    return newVal;
+  genId() {
+    return "" + this.#id++;
   }
 }
 
 class LogFileSink {
   constructor(file = "") {
-    this.path = require("path");
-    this.fs = require("fs");
+    // this.path = require("path");
+    // this.fs = require("fs");
 
     this.file = file;
   }
@@ -190,6 +169,13 @@ if (!globalThis[GLOBAL_KEY]) {
   globalThis[GLOBAL_KEY] = Recorder.instance();
 }
 
-process.on("beforeExit", async () => {
+async function shutdown() {
   await Recorder.instance().flush();
-});
+  process.exit(0);
+}
+
+process.on("beforeExit", shutdown);
+process.on("uncaughtException", shutdown);
+process.on("unhandledRejection", shutdown);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

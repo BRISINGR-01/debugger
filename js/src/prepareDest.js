@@ -26,7 +26,7 @@ export default function prepareDest(src, dest) {
   }
 
   fs.symlinkSync(
-    new URL("./__debugger_recorder", import.meta.url),
+    new URL("./debugger_recorder_pkg", import.meta.url),
     path.resolve(debug_node_modules, "__debugger_recorder"),
   );
 }

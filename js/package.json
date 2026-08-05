@@ -5,10 +5,7 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "index.js",
-  "bin": {
-    "instrument": "./instrument.js"
-  },
+  "main": "src/index.js",
   "dependencies": {
     "@babel/core": "^8.0.1",
     "typescript": "^7.0.2"

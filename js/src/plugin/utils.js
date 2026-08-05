@@ -1,0 +1,135 @@
+import * as t from "@babel/types";
+
+/** Build: __recorder__.emit({ type, ...fields }) */
+export function emitCall(fields, isExpr = false) {
+  fields.push(prop("fn_id", t.identifier("__fn_id")));
+
+  const expr = t.callExpression(
+    t.memberExpression(t.identifier("__recorder__"), t.identifier("emit")),
+    [t.objectExpression(fields)],
+  );
+  expr._instrumented = true;
+
+  return isExpr ? expr : t.expressionStatement(expr);
+}
+
+export function createVar(name, type, val) {
+  return t.objectExpression([
+    prop("name", strLiteral(name)),
+    prop("type", strLiteral(type)),
+    prop("value", t.cloneNode(val)),
+  ]);
+}
+
+export function strLiteral(s) {
+  return t.stringLiteral(s);
+}
+
+export function prop(key, value) {
+  return t.objectProperty(t.identifier(key), value);
+}
+
+export function getLocProp(node, filepath) {
+  return prop(
+    "loc",
+    strLiteral(`${filepath}:${node.loc.start.line}:${node.loc.start.column}`),
+  );
+}
+
+/**
+ * Get a human-readable name for a export function node from its path context.
+ */
+export function getFuncName(path) {
+  const node = path.node;
+
+  if (node.id && node.id.name) return node.id.name;
+
+  const parent = path.parent;
+
+  if (t.isVariableDeclarator(parent) && t.isIdentifier(parent.id)) {
+    return parent.id.name;
+  }
+
+  if (t.isObjectProperty(parent) && t.isIdentifier(parent.key)) {
+    return parent.key.name;
+  }
+
+  if (t.isClassMethod(path.node)) {
+    if (t.isIdentifier(node.key)) return node.key.name;
+  }
+
+  if (t.isAssignmentExpression(parent) && t.isMemberExpression(parent.left)) {
+    const left = parent.left;
+    const obj = t.isThisExpression(left.object)
+      ? "this"
+      : t.isIdentifier(left.object)
+        ? left.object.name
+        : "?";
+    const prop = t.isIdentifier(left.property) ? left.property.name : "?";
+    return `${obj}.${prop}`;
+  }
+
+  if (t.isMemberExpression(path.parent.callee)) {
+    if (path.parent.callee.object.name) {
+      const binding = path.scope.getBinding(path.parent.callee.object.name);
+
+      if (binding) {
+        const className = resolveInstanceClass(binding);
+
+        if (className) {
+          return `${className}.${path.parent.callee.property.name}`;
+        }
+      }
+    } else {
+      return `${path.parent.callee.object.type}.${path.parent.callee.property.name}`;
+    }
+  }
+
+  return "(anonymous)";
+}
+
+export function isModuleExport(node, t) {
+  if (!t.isMemberExpression(node)) return false;
+
+  // module.exports
+  if (
+    t.isIdentifier(node.object, { name: "module" }) &&
+    t.isIdentifier(node.property, { name: "exports" })
+  ) {
+    return true;
+  }
+
+  // exports.foo
+  if (t.isIdentifier(node.object, { name: "exports" })) {
+    return true;
+  }
+
+  // module.exports.foo
+  if (
+    t.isMemberExpression(node.object) &&
+    t.isIdentifier(node.object.object, { name: "module" }) &&
+    t.isIdentifier(node.object.property, { name: "exports" })
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function resolveInstanceClass(binding) {
+  for (const ref of binding.constantViolations) {
+    // Handles reassignment, ignore for now
+  }
+
+  const declaration = binding.path;
+
+  if (
+    declaration.isVariableDeclarator() &&
+    t.isNewExpression(declaration.node.init) &&
+    t.isIdentifier(declaration.node.init.callee)
+  ) {
+    return declaration.node.init.callee.name;
+  }
+
+  return null;
+}
