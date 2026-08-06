@@ -1,5 +1,5 @@
 import { ChevronRight, ChevronDown } from "lucide-react";
-import { TimeTrack } from "./TimeTrack.jsx";
+import { TimeTrack } from "./TimeTrack.tsx";
 import { AssignRow } from "./AssignRow.js";
 import { frameHasMatch } from "../utils/search.js";
 import { fmtArgs } from "../utils/format.ts";
@@ -7,7 +7,6 @@ import "../App.css";
 import type { FnNode } from "../utils/FnTree.ts";
 import type { Id } from "../../../../json-spec.ts";
 import type FnTree from "../utils/FnTree.ts";
-import FnExit from "./FnExit.tsx";
 
 const DEPTH_COLORS = [
   "#5b8dee",

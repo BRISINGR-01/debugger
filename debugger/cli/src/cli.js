@@ -44,7 +44,7 @@ export function parseArgs(argv) {
     command: program.args.join(" "),
     exclude: opts.exclude,
     sourceDir,
-    single: opts.single,
-    noRestart: opts.noRestart,
+    singleRun: opts.single,
+    shouldRestart: !opts.noRestart,
   };
 }

@@ -5,6 +5,7 @@ import fs from "fs";
 import { parseArgs } from "./cli.js";
 import {
   buildExcludeMatcher,
+  needsUpdate,
   debugDirName,
   makeSymlink,
   processEntry,
@@ -14,45 +15,41 @@ import {
 import { run, killChild } from "./runner.js";
 import { watchChanges } from "./watcher.js";
 import instrumenters, { chooseInstrumenter } from "./instrumenters.js";
+import "server";
 
-const {
-  command,
-  exclude,
-  sourceDir,
-  single: singleRun,
-  noRestart,
-} = parseArgs(process.argv);
+function main() {
+  const { command, exclude, sourceDir, singleRun, shouldRestart } = parseArgs(
+    process.argv,
+  );
 
-const debugDir = path.resolve(sourceDir, debugDirName);
+  const debugDir = path.resolve(sourceDir, debugDirName);
 
-setUp(sourceDir, debugDir, exclude);
+  setUp(sourceDir, debugDir, exclude);
 
-const child = run(command, debugDir);
+  let child = run(command, debugDir);
 
-const watcher = singleRun
-  ? null
-  : watchChanges({
-      sourceDir,
-      debugDir,
-      excludePatterns: exclude,
-      onChange: () => {
-        if (noRestart) return;
+  const watcher = singleRun
+    ? null
+    : watchChanges({
+        sourceDir,
+        debugDir,
+        excludePatterns: exclude,
+        onChange: () => {
+          if (shouldRestart) {
+            killChild(child);
+            throttle(() => (child = run(command, debugDir)));
+          }
+        },
+      });
 
-        killChild(child);
-        throttle(() => (child = run(command, debugDir)));
-      },
-    });
-
-process.on("SIGINT", async () => {
-  killChild(child);
-  if (watcher) await watcher.close();
-  removeDebugDir(debugDir);
-  process.exit(0);
-});
+  process.on("SIGINT", async () => {
+    killChild(child);
+    if (watcher) await watcher.close();
+    process.exit(0);
+  });
+}
 
 function setUp(sourceDir, debugDir, excludePatterns) {
-  if (fs.existsSync(debugDir)) removeDebugDir(debugDir);
-
   fs.mkdirSync(debugDir, { recursive: true });
 
   instrumenters.js.prepare(sourceDir, debugDir);
@@ -65,6 +62,9 @@ function setUp(sourceDir, debugDir, excludePatterns) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const srcPath = path.resolve(dir, entry.name);
       const fileRelPath = path.relative(sourceDir, srcPath);
+      if (fileRelPath === debugDirName) continue;
+
+      if (!needsUpdate(srcPath, path.join(debugDir, fileRelPath))) continue;
 
       if (isExcluded(fileRelPath) || isExcluded(entry.name)) {
         makeSymlink(srcPath, fileRelPath, debugDir);
@@ -82,3 +82,5 @@ function setUp(sourceDir, debugDir, excludePatterns) {
 
   walk(sourceDir);
 }
+
+main();

@@ -4,18 +4,17 @@ import {
   Pause,
   RotateCcw,
   Search,
-  AlertTriangle,
   Sparkles,
   Trash2,
   Radio,
 } from "lucide-react";
-import FnTree, { type FnNode } from "./utils/FnTree.ts";
+import FnTree from "./utils/FnTree.ts";
 import { StatusDot } from "./components/StatusDot.tsx";
 import { FrameNode } from "./components/FrameNode.tsx";
 import "./App.css";
 import "./index.css";
 import { useWebSocket } from "./hooks/useWebSocket.ts";
-import { usePlayback } from "./hooks/usePlayback";
+import { usePlayback } from "./hooks/usePlayback.ts";
 import type { Id } from "../../../json-spec.ts";
 
 const WS_URL = "ws://localhost:8000/ws";
@@ -36,13 +35,18 @@ export default function TraceExplorer() {
   const toggle = useCallback((id: Id) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
       return next;
     });
   }, []);
 
-  const warnEvent = [...events].reverse().find((e) => e.event === "warn");
+  // const warnEvent = [...events].reverse().find((e) => e.event === "warn");
 
   const times = events.map((e) => e.time);
   const minTime = times.length ? Math.min(...times) : 0;
@@ -217,14 +221,14 @@ export default function TraceExplorer() {
             toggle={toggle}
           />
 
-          {warnEvent && currentTime >= warnEvent.time && (
+          {/* {warnEvent && currentTime >= warnEvent.time && (
             <div className="te-warn-banner">
               <AlertTriangle size={16} />
               <div className="te-warn-title">
                 {warnEvent.message} \u2014 t={warnEvent.time.toFixed(3)}ms
               </div>
             </div>
-          )}
+          )} */}
 
           <div className="te-legend">
             <div className="te-legend-item">

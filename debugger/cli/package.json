@@ -13,5 +13,8 @@
     "chokidar": "^4.0.3",
     "commander": "^12.1.0",
     "picomatch": "^4.0.2"
-  }
+  },
+  "workspaces": [
+    "../server"
+  ]
 }

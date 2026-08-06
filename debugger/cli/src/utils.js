@@ -5,19 +5,6 @@ import instrumenters, { chooseInstrumenter } from "./instrumenters.js";
 
 export const debugDirName = ".debug";
 
-// const instrument = {
-//   ".js": instrumentJSFile,
-//   ".jsx": instrumentJSFile,
-//   ".ts": instrumentJSFile,
-//   ".tsx": instrumentJSFile,
-// ".c": { name: "cpp", cmd: null },
-// ".cpp": { name: "cpp", cmd: null },
-// ".cxx": { name: "cpp", cmd: null },
-// ".cc": { name: "cpp", cmd: null },
-// ".h": { name: "cpp", cmd: null },
-// ".hpp": { name: "cpp", cmd: null },
-// };
-
 export function parseGitignore(dir) {
   const p = path.resolve(dir, ".gitignore");
   if (!fs.existsSync(p)) return [];
@@ -76,4 +63,10 @@ let restartTimer = null;
 export function throttle(cb) {
   clearTimeout(restartTimer);
   restartTimer = setTimeout(cb, 100);
+}
+
+export function needsUpdate(src, dest) {
+  return (
+    !fs.existsSync(dest) || fs.statSync(src).mtimeMs > fs.statSync(dest).mtimeMs
+  );
 }

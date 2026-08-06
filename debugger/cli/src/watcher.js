@@ -1,7 +1,7 @@
 import chokidar from "chokidar";
 import { relative, resolve, dirname, basename } from "path";
 import { rmSync, mkdirSync, statSync, lstatSync } from "fs";
-import { buildExcludeMatcher, processEntry } from "./utils.js";
+import { buildExcludeMatcher, needsUpdate, processEntry } from "./utils.js";
 
 export function watchChanges({
   sourceDir,
@@ -14,8 +14,10 @@ export function watchChanges({
   const watcher = chokidar.watch(sourceDir, {
     ignored: (path, stats) => {
       if (path.startsWith(debugDir)) return true;
-      const rel = relative(sourceDir, path);
-      return isExcluded(rel) || isExcluded(basename(path));
+
+      return (
+        isExcluded(relative(sourceDir, path)) || isExcluded(basename(path))
+      );
     },
     ignoreInitial: true,
   });
@@ -24,12 +26,9 @@ export function watchChanges({
     const rel = relative(sourceDir, filePath);
     const target = resolve(debugDir, rel);
 
-    if (rel.startsWith(debugDir)) return;
-
     if (event === "unlinkDir" || event === "unlink") {
       try {
         rmSync(target, { recursive: true, force: true });
-        console.log(`[debugger]   removed ${rel}`);
       } catch {}
       onChange();
       return;

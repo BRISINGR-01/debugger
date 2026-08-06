@@ -28,6 +28,7 @@ export function AssignRow({
       <span className="te-assign-tag" data-kind={label}>
         {label}
       </span>
+      <span>{event.variable.name}</span>
       {event.event === "declare" && (
         <ArrowRight size={11} className="te-arrow" />
       )}

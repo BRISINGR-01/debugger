@@ -31,7 +31,7 @@ class Recorder {
   #startTime;
   #setupPromise = null;
   queue = [];
-  #id = 0;
+  #id = 1; // 0 is global
 
   constructor(sink) {
     this.sink = sink;
@@ -50,15 +50,9 @@ class Recorder {
         typeof process !== "undefined" &&
         process.env &&
         process.env.RECORDER_URL;
-      const sink = url
-        ? new ServerSink(url)
-        : new LogFileSink(
-            typeof process !== "undefined"
-              ? process.env.RECORDER_LOG_FILE
-              : undefined,
-          );
+      const sink = new ServerSink(url ?? "http://localhost:8000");
 
-      sink?.setUp();
+      sink.setUp();
       globalThis[GLOBAL_KEY] = new Recorder(sink);
     }
 
@@ -78,16 +72,20 @@ class Recorder {
 
   emit(event) {
     if (event.variable) {
-      event.variable.value = JSON.stringify(event.variable.value);
+      event.variable.value = serialize(event.variable.value);
     }
     if (event.oldValue) {
-      event.oldValue = JSON.stringify(event.oldValue);
+      event.oldValue = serialize(event.oldValue);
+    }
+    if (event.error) {
+      event.error = serialize(event.error);
     }
 
     const ev = {
       time: +(now() - this.#startTime).toFixed(3),
       ...event,
     };
+
     this.queue.push(ev);
   }
 
@@ -96,39 +94,28 @@ class Recorder {
   }
 }
 
-class LogFileSink {
-  constructor(file = "") {
-    // this.path = require("path");
-    // this.fs = require("fs");
+const isObj = (o) => o != null && typeof o === "object";
 
-    this.file = file;
+function serialize(obj, depth = 2) {
+  if (!isObj(obj)) return JSON.stringify(obj);
+
+  console.log(obj);
+
+  const name = obj.constructor.name;
+
+  if (name === "Error") {
+    return `Error: "${obj.message ?? "No message"}"`;
   }
 
-  async setUp() {
-    if (!this.file) {
-      this.file = this.path.resolve(process.cwd(), ".trace", "log");
-    }
+  let res = `${name === "Object" ? "" : `${name} `} {\n`;
+  for (const key in obj) {
+    if (!Object.hasOwn(obj, key)) continue;
 
-    this.fs.mkdirSync(this.path.dirname(this.file), { recursive: true });
-
-    await this.clear();
+    const val = obj[key];
+    res += `${" ".repeat(depth)}${key}: ${serialize(val, depth + 2)}`;
   }
 
-  async send(ev) {
-    try {
-      this.fs.appendFileSync(this.file, JSON.stringify(ev) + "\n", "utf8");
-      return null;
-    } catch (error) {
-      if (error instanceof Error) return error;
-      if (typeof error === "string") return new Error(error);
-
-      return new Error(`Could not log event to ${this.file}`);
-    }
-  }
-
-  async clear() {
-    fs.writeFileSync(this.file, "");
-  }
+  return res + "\n}";
 }
 
 class ServerSink {
@@ -169,7 +156,9 @@ if (!globalThis[GLOBAL_KEY]) {
   globalThis[GLOBAL_KEY] = Recorder.instance();
 }
 
-async function shutdown() {
+async function shutdown(e) {
+  console.error(e);
+
   await Recorder.instance().flush();
   process.exit(0);
 }

@@ -10,23 +10,26 @@ export default function prepareDest(src, dest) {
 
   const src_node_modules = path.resolve(src, "node_modules");
   const debug_node_modules = path.resolve(dest, "node_modules");
-  fs.mkdirSync(debug_node_modules);
+  if (!fs.existsSync(debug_node_modules)) fs.mkdirSync(debug_node_modules);
 
-  console.log(src_node_modules, debug_node_modules);
   if (fs.existsSync(src_node_modules)) {
-    console.log(1);
-
     for (const entry of fs.readdirSync(src_node_modules)) {
-      console.log(entry);
-      fs.symlinkSync(
-        path.join(src_node_modules, entry),
-        path.join(debug_node_modules, entry),
-      );
+      const linkPath = path.join(debug_node_modules, entry);
+      if (!fs.existsSync(linkPath)) {
+        fs.symlinkSync(path.join(src_node_modules, entry), linkPath);
+      }
     }
   }
 
-  fs.symlinkSync(
-    new URL("./debugger_recorder_pkg", import.meta.url),
-    path.resolve(debug_node_modules, "__debugger_recorder"),
+  const debuggerPkgPath = path.resolve(
+    debug_node_modules,
+    "__debugger_recorder",
   );
+
+  if (!fs.existsSync(debuggerPkgPath)) {
+    fs.symlinkSync(
+      new URL("./debugger_recorder_pkg", import.meta.url),
+      debuggerPkgPath,
+    );
+  }
 }

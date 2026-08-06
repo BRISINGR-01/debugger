@@ -36,4 +36,5 @@ const instrumenters = {
     },
   },
 };
+
 export default instrumenters;

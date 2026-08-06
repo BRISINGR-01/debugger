@@ -2,17 +2,25 @@ import { useEffect, useRef } from "react";
 
 const PLAY_DURATION_MS = 7000;
 
-export function usePlayback(playing, currentTime, setCurrentTime, minTime, maxTime, setPlaying) {
-  const rafRef = useRef(null);
+export function usePlayback(
+  playing: boolean,
+  currentTime: number,
+  setCurrentTime: (n: number) => void,
+  minTime: number,
+  maxTime: number,
+  setPlaying: (n: boolean) => void,
+) {
+  const rafRef = useRef<number>(null);
 
   useEffect(() => {
     if (!playing) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      return;
+      return () => {};
     }
+
     const start = performance.now();
     const startTime = currentTime >= maxTime ? minTime : currentTime;
-    const tick = (now) => {
+    const tick = (now: number) => {
       const frac = (now - start) / PLAY_DURATION_MS;
       const t = startTime + frac * (maxTime - startTime);
       if (t >= maxTime) {

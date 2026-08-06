@@ -42,20 +42,13 @@ export default function recorderPlugin({ types }) {
         )
           return;
 
-        const idGenCall = t.callExpression(
-          t.memberExpression(
-            t.identifier("__recorder__"),
-            t.identifier("genId"),
-          ),
-          [],
-        );
-        idGenCall._instrumented = true;
         const fnId = t.variableDeclaration("const", [
-          t.variableDeclarator(t.identifier("__fn_id"), idGenCall),
+          t.variableDeclarator(t.identifier("__fn_id"), strLiteral("0")),
         ]);
         fnId._instrumented = true;
         path.unshiftContainer("body", fnId);
 
+        // insert import to recorder.js
         if (moduleType === "module") {
           // ESM
           path.unshiftContainer(
@@ -282,6 +275,8 @@ export default function recorderPlugin({ types }) {
           }
         } else if (t.isSuper(callee)) {
           calleeId = "super";
+        } else if (t.isArrowFunctionExpression(callee)) {
+          return;
         }
 
         const fnCall = emitCall([
@@ -294,6 +289,31 @@ export default function recorderPlugin({ types }) {
 
         path.insertBefore(fnCall);
       },
+      SwitchCase(path) {
+        const { consequent } = path.node;
+
+        if (consequent.length !== 1 || !t.isBlockStatement(consequent[0])) {
+          path.node.consequent = [t.blockStatement(consequent)];
+        }
+      },
     },
   };
+}
+
+function stringifyMemberChain(node) {
+  if (t.isIdentifier(node)) return node.name;
+  if (t.isThisExpression(node)) return "this";
+  if (t.isSuper(node)) return "super";
+  if (t.isCallExpression(node)) return `${stringifyMemberChain(node.callee)}()`;
+
+  if (t.isMemberExpression(node)) {
+    const objectStr = stringifyMemberChain(node.object);
+    const propStr = node.computed
+      ? `[${t.isStringLiteral(node.property) ? node.property.value : stringifyMemberChain(node.property)}]`
+      : node.property.name;
+    return node.computed ? `${objectStr}${propStr}` : `${objectStr}.${propStr}`;
+  }
+
+  // fallback for anything else (new expressions, parenthesized, etc.)
+  return node.type;
 }

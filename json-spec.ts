@@ -39,6 +39,10 @@ export type ChangeEvent = Event & {
   oldValue: string;
 };
 
+export type ThrowEvent = Event & {
+  error: string;
+};
+
 export type TryEnterEvent = Event & {
   event: "try-enter";
 };

@@ -66,6 +66,8 @@ export default class FnTree {
   }
 
   enter(ev: EnterEvent) {
+    console.log(ev, this.nodes);
+
     const node = this.createNode(ev.fn_id);
     const parentIndex = this.calls.findLastIndex(
       (c) => c.calleeName === ev.function_name,
@@ -92,6 +94,8 @@ export default class FnTree {
   }
 
   alterVar(e: ChangeEvent | DeclareEvent) {
+    console.log(e, this.nodes);
+
     this.nodes[e.fn_id].timeline.push(e);
   }
 
