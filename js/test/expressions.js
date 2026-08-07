@@ -261,7 +261,7 @@ let tagged = tag`a=${a} b=${b}`;
 
 // ---------- Array/object literals with spread ----------
 // let arr2 = [...arr, 6, 7];
-let arr2 = [...arr, 6, 7];
+let arr2 = [...arr, 6, { V: new Point(1, 1) }];
 // let obj2 = { ...obj, w: 4 };
 let obj2 = { ...obj, w: 4 };
 // c = Math.max(...arr);

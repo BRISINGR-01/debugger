@@ -175,15 +175,16 @@ export default {
       calleeId ??= "(anonymous)";
     }
 
-    const fnCall = emitCall([
-      prop("event", strLiteral("call")),
-      prop("callee", strLiteral(calleeId)),
-      getLocProp(path.node, filepath),
-    ]);
-
-    fnCall._instrumented = true;
-
-    path.insertBefore(fnCall);
+    path.replaceWith(
+      emitCall([
+        prop("event", strLiteral("call")),
+        prop("callee", strLiteral(calleeId)),
+        prop("value", path.node), // original call, now nested — still evaluates & returns its real result
+        getLocProp(path.node, filepath),
+      ]),
+    );
+    // no skip(): lets ReferencedIdentifier/other visitors still process
+    // the original call's callee object (e.g. `a` in `a.getVal()`) and args
   }),
 
   // ── Logical expressions: <expr1> || <expr2>, <expr1> && <expr2> ──────
@@ -245,6 +246,40 @@ export default {
     );
     // No skip(): lets traversal descend into the now-nested original node,
     // so `a * 3` inside `2 * (a * 3)` also gets wrapped.
+  }),
+  ReferencedIdentifier: safeInst((path) => {
+    if (path.node._instrumented) return;
+
+    const varName = path.node.name;
+
+    // skip our own injected machinery (__recorder__, __fn_id, __old_N__, etc.)
+    if (varName.startsWith("__")) return;
+
+    // skip the function name itself in `fn(...)` / `new Fn(...)` — the
+    // callee is already reported by the "call" event
+    const parent = path.parent;
+    if (
+      (t.isCallExpression(parent) || t.isNewExpression(parent)) &&
+      parent.callee === path.node
+    )
+      return;
+
+    // only track real bindings (skip globals like Math, console, etc.)
+    if (!path.scope.getBinding(varName)) return;
+
+    path.node._instrumented = true;
+
+    path.replaceWith(
+      emitCall(
+        [
+          prop("event", strLiteral("read")),
+          prop("variable", createVar(varName, "kind", t.cloneNode(path.node))),
+          getLocProp(path.node, filepath),
+        ],
+        true,
+      ),
+    );
+    path.skip(); // the cloned identifier inside is a leaf — don't re-descend
   }),
 };
 

@@ -26,13 +26,25 @@ export function strLiteral(s) {
 }
 
 export function prop(key, value) {
+  value._instrumented = true;
   return t.objectProperty(t.identifier(key), value);
 }
 
 export function getLocProp(node, filepath) {
   return prop(
     "loc",
-    strLiteral(`${filepath}:${node.loc.start.line}:${node.loc.start.column}`),
+    t.objectExpression([
+      prop(
+        "start",
+        strLiteral(
+          `${filepath}:${node.loc.start.line}:${node.loc.start.column}`,
+        ),
+      ),
+      prop(
+        "end",
+        strLiteral(`${filepath}:${node.loc.end.line}:${node.loc.end.column}`),
+      ),
+    ]),
   );
 }
 

@@ -2,7 +2,10 @@ export type Id = string;
 export type Event = {
   fn_id: Id; // for declaration/change it is the function in which it happens or "global_space" is not in a function
   time: number;
-  loc: string;
+  loc: {
+    start: string;
+    end: string;
+  };
 };
 
 export type Var = {
@@ -13,6 +16,7 @@ export type Var = {
 
 export type CallEvent = Event & {
   event: "call";
+  value: string;
   callee: Id;
 };
 

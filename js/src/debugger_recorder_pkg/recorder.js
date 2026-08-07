@@ -73,13 +73,17 @@ class Recorder {
   }
 
   emit(event) {
+    let valueToReturn;
     if (event.variable) {
+      valueToReturn = event.variable.value;
       event.variable.value = serialize(event.variable.value);
     }
     if (event.oldValue) {
+      valueToReturn = event.oldValue;
       event.oldValue = serialize(event.oldValue);
     }
     if (event.error) {
+      valueToReturn = event.error;
       event.error = serialize(event.error);
     }
 
@@ -90,8 +94,8 @@ class Recorder {
 
     this.queue.push(ev);
 
-    if (event.variable) return event.variable.value;
     if (event.value) return event.value;
+    return valueToReturn;
   }
 
   genId() {
@@ -104,6 +108,15 @@ const isObj = (o) => o != null && typeof o === "object";
 function serialize(obj, depth = 2) {
   if (typeof obj === "function") return "Function() { [native code] }";
   if (!isObj(obj)) return JSON.stringify(obj);
+
+  if (Array.isArray(obj)) {
+    const res = [];
+    for (let i = 0; i < obj.length; i++) {
+      res[i] = serialize(obj[i]);
+    }
+
+    return JSON.stringify(res);
+  }
 
   const name = obj.constructor.name;
 

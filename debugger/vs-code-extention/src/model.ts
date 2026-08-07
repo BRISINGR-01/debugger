@@ -32,6 +32,12 @@ export class TraceModel {
   /** normalized file path -> (0-based line -> sorted ascending global event indices) */
   private byFile: Map<string, Map<number, number[]>> = new Map();
 
+  /** normalized file path -> global event indices whose range spans multiple lines */
+  private byFileMulti: Map<string, number[]> = new Map();
+
+  /** normalized file path -> all event indices for that file, ascending */
+  private fileEvents: Map<string, number[]> = new Map();
+
   /** Current position in `events`. -1 means "before everything" (no trace loaded/at start). */
   currentIndex = -1;
 
@@ -55,6 +61,8 @@ export class TraceModel {
     this.events = withOrder.map((x) => x.e);
     this.locations = this.events.map((e) => parseLoc(e.loc));
     this.byFile = new Map();
+    this.byFileMulti = new Map();
+    this.fileEvents = new Map();
 
     this.locations.forEach((loc, idx) => {
       if (!loc) {
@@ -72,6 +80,22 @@ export class TraceModel {
         fileMap.set(loc.line, arr);
       }
       arr.push(idx);
+
+      if (loc.endLine > loc.line) {
+        let multi = this.byFileMulti.get(key);
+        if (!multi) {
+          multi = [];
+          this.byFileMulti.set(key, multi);
+        }
+        multi.push(idx);
+      }
+
+      let fe = this.fileEvents.get(key);
+      if (!fe) {
+        fe = [];
+        this.fileEvents.set(key, fe);
+      }
+      fe.push(idx);
     });
 
     this.currentIndex = this.events.length - 1;
@@ -81,14 +105,54 @@ export class TraceModel {
     this.events = [];
     this.locations = [];
     this.byFile.clear();
+    this.byFileMulti.clear();
+    this.fileEvents.clear();
     this.currentIndex = -1;
     this.parseErrors = [];
+  }
+
+  /** All event indices recorded for a file, ascending (matches `events` order). */
+  getFileEventIndices(filePath: string): number[] {
+    return this.fileEvents.get(normalizePath(filePath)) ?? [];
   }
 
   /** All events recorded for a given (0-based) line in a file, in chronological order. */
   getLineHistory(filePath: string, line: number): number[] {
     const fileMap = this.byFile.get(normalizePath(filePath));
     return fileMap?.get(line) ?? [];
+  }
+
+  /**
+   * All event indices whose recorded range covers the position (0-based line
+   * and character), regardless of which line the event starts on.
+   */
+  getEventsAt(filePath: string, line: number, character: number): number[] {
+    const file = normalizePath(filePath);
+    const result: number[] = [];
+
+    const startIdx = this.byFile.get(file)?.get(line);
+    if (startIdx) {
+      for (const idx of startIdx) {
+        const loc = this.locations[idx];
+        if (loc && character >= loc.column && character < loc.endColumn) {
+          result.push(idx);
+        }
+      }
+    }
+
+    const multi = this.byFileMulti.get(file);
+    if (multi) {
+      for (const idx of multi) {
+        const loc = this.locations[idx];
+        if (!loc) continue;
+        if (line < loc.line || line > loc.endLine) continue;
+        if (line === loc.line && character < loc.column) continue;
+        if (line === loc.endLine && character >= loc.endColumn) continue;
+        result.push(idx);
+      }
+    }
+
+    return result;
   }
 
   /** For every traced line in `filePath`, the most recent event index at/before the cursor. */

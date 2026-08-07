@@ -136,7 +136,8 @@ export function activate(context: vscode.ExtensionContext): void {
         model.events.map((ev, i) => ({
           index: i,
           label: `${typeof ev.time === "number" ? ev.time.toFixed(3) : i}  ${ev.event}`,
-          description: ev.loc,
+          description:
+            typeof ev.loc === "string" ? ev.loc : (ev.loc?.start ?? undefined),
           detail:
             ev.event === "declare" && ev.variable
               ? `${ev.variable.name} = ${ev.variable.value}`
@@ -177,13 +178,37 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!model.loaded) {
           return undefined;
         }
-        const history = model.getLineHistory(
-          document.uri.fsPath,
-          position.line,
-        );
+        const filePath = document.uri.fsPath;
+        const history = model.getLineHistory(filePath, position.line);
         if (history.length === 0) {
           return undefined;
         }
+
+        const covering = model.getEventsAt(
+          filePath,
+          position.line,
+          position.character,
+        );
+        if (covering.length > 0) {
+          // Scope the hover to the event whose recorded range covers the
+          // cursor (innermost first), and highlight that range in the editor.
+          const idx = bestCoveringEvent(model, covering);
+          const range = rangeOf(model, document, idx);
+          const md = new vscode.MarkdownString();
+          md.isTrusted = false;
+          if (range) {
+            md.appendMarkdown("```\n" + document.getText(range) + "\n```\n\n");
+          }
+          md.appendMarkdown(`### ${formatEventMarkdown(model.events[idx])}\n`);
+          const others = history.filter((i) => i !== idx).length;
+          if (others > 0) {
+            md.appendMarkdown(
+              `\n_…plus ${others} other event${others === 1 ? "" : "s"} on this line._`,
+            );
+          }
+          return new vscode.Hover(md, range);
+        }
+
         const md = new vscode.MarkdownString();
         md.isTrusted = false;
         md.appendMarkdown(
@@ -205,6 +230,56 @@ export function activate(context: vscode.ExtensionContext): void {
   // editor title bar using the same command.
   setHasTrace(false);
   updateStatusBar();
+}
+
+/**
+ * Among the events covering the cursor, pick the most relevant: the innermost
+ * (smallest) range, breaking ties toward the current trace position.
+ */
+function bestCoveringEvent(model: TraceModel, covering: number[]): number {
+  const area = (i: number) => {
+    const loc = model.locations[i];
+    if (!loc) return Number.POSITIVE_INFINITY;
+    return (loc.endLine - loc.line) * 100000 + (loc.endColumn - loc.column);
+  };
+  let best = covering[0];
+  for (const i of covering) {
+    const a = area(i);
+    const b = area(best);
+    if (a < b || (a === b && i === model.currentIndex)) {
+      best = i;
+    }
+  }
+  return best;
+}
+
+/** Clamped editor range for an event's recorded location, or undefined. */
+function rangeOf(
+  model: TraceModel,
+  document: vscode.TextDocument,
+  idx: number,
+): vscode.Range | undefined {
+  const loc = model.locations[idx];
+  if (!loc) return undefined;
+  if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
+
+  const startChar = Math.min(
+    loc.column,
+    document.lineAt(loc.line).text.length,
+  );
+  if (loc.endLine === loc.line) {
+    const endChar = Math.min(
+      loc.endColumn,
+      document.lineAt(loc.line).text.length,
+    );
+    return new vscode.Range(loc.line, startChar, loc.line, endChar);
+  }
+  const endLine = Math.min(loc.endLine, document.lineCount - 1);
+  const endChar = Math.min(
+    loc.endColumn,
+    document.lineAt(endLine).text.length,
+  );
+  return new vscode.Range(loc.line, startChar, endLine, endChar);
 }
 
 function revealCurrent(model: TraceModel): void {

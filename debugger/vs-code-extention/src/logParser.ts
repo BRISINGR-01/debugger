@@ -1,5 +1,5 @@
 import * as vm from "vm";
-import { TraceEvent } from "./types";
+import { TraceEvent, ParsedLocation } from "./types";
 
 /**
  * The log is a sequence of JS object-literal values (as produced by something
@@ -101,21 +101,46 @@ export function parseLog(text: string): ParseResult {
   return { events, errors };
 }
 
-export function parseLoc(
-  loc?: string,
-): { file: string; line: number; column: number } | undefined {
-  if (!loc) {
-    return undefined;
-  }
+function parsePos(ref: string): { file: string; line: number; column: number } | undefined {
   // Matches "/path/to/file.ts:87:2" — also tolerant of Windows drive letters
   // like "C:\foo\bar.ts:87:2" since we anchor on the LAST two ":<number>" groups.
-  const m = /^(.*):(\d+):(\d+)$/.exec(loc);
+  // Line is 1-based, column is 0-based in the log format.
+  const m = /^(.*):(\d+):(\d+)$/.exec(ref);
   if (!m) {
     return undefined;
   }
   return {
     file: m[1],
     line: parseInt(m[2], 10) - 1,
-    column: parseInt(m[3], 10) - 1,
+    column: parseInt(m[3], 10),
+  };
+}
+
+export function parseLoc(
+  loc?: string | { start: string; end: string },
+): ParsedLocation | undefined {
+  if (!loc) {
+    return undefined;
+  }
+  if (typeof loc === "string") {
+    // Legacy single-position format ("file:line:col"); end is unknown, so
+    // treat the range as a zero-width point.
+    const p = parsePos(loc);
+    if (!p) {
+      return undefined;
+    }
+    return { ...p, endLine: p.line, endColumn: p.column + 1 };
+  }
+  const start = parsePos(loc.start);
+  const end = parsePos(loc.end);
+  if (!start || !end) {
+    return undefined;
+  }
+  return {
+    file: start.file,
+    line: start.line,
+    column: start.column,
+    endLine: end.line,
+    endColumn: end.column,
   };
 }
