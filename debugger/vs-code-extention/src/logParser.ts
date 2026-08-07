@@ -1,5 +1,5 @@
-import * as vm from 'vm';
-import { TraceEvent } from './types';
+import * as vm from "vm";
+import { TraceEvent } from "./types";
 
 /**
  * The log is a sequence of JS object-literal values (as produced by something
@@ -12,7 +12,7 @@ export function splitObjects(text: string): string[] {
   const chunks: string[] = [];
   let depth = 0;
   let start = -1;
-  let inString: false | '\'' | '"' | '`' = false;
+  let inString: false | "'" | '"' | "`" = false;
   let escape = false;
 
   for (let i = 0; i < text.length; i++) {
@@ -21,7 +21,7 @@ export function splitObjects(text: string): string[] {
     if (inString) {
       if (escape) {
         escape = false;
-      } else if (ch === '\\') {
+      } else if (ch === "\\") {
         escape = true;
       } else if (ch === inString) {
         inString = false;
@@ -29,17 +29,17 @@ export function splitObjects(text: string): string[] {
       continue;
     }
 
-    if (ch === '\'' || ch === '"' || ch === '`') {
+    if (ch === "'" || ch === '"' || ch === "`") {
       inString = ch;
       continue;
     }
 
-    if (ch === '{') {
+    if (ch === "{") {
       if (depth === 0) {
         start = i;
       }
       depth++;
-    } else if (ch === '}') {
+    } else if (ch === "}") {
       depth--;
       if (depth === 0 && start !== -1) {
         chunks.push(text.slice(start, i + 1));
@@ -63,7 +63,7 @@ export function splitObjects(text: string): string[] {
  * output, not untrusted input.
  */
 export function parseChunk(chunk: string): TraceEvent {
-  const script = new vm.Script('(' + chunk + '\n)');
+  const script = new vm.Script("(" + chunk + "\n)");
   const context = vm.createContext(Object.create(null));
   const result = script.runInContext(context, { timeout: 1000 });
   return result as TraceEvent;
@@ -82,20 +82,28 @@ export function parseLog(text: string): ParseResult {
   for (const chunk of chunks) {
     try {
       const obj = parseChunk(chunk);
-      if (obj && typeof obj === 'object' && typeof obj.event === 'string') {
+      if (obj && typeof obj === "object" && typeof obj.event === "string") {
         events.push(obj);
       } else {
-        errors.push({ chunk, message: 'Parsed value has no string "event" field' });
+        errors.push({
+          chunk,
+          message: 'Parsed value has no string "event" field',
+        });
       }
     } catch (e) {
-      errors.push({ chunk, message: e instanceof Error ? e.message : String(e) });
+      errors.push({
+        chunk,
+        message: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 
   return { events, errors };
 }
 
-export function parseLoc(loc?: string): { file: string; line: number; column: number } | undefined {
+export function parseLoc(
+  loc?: string,
+): { file: string; line: number; column: number } | undefined {
   if (!loc) {
     return undefined;
   }
@@ -108,6 +116,6 @@ export function parseLoc(loc?: string): { file: string; line: number; column: nu
   return {
     file: m[1],
     line: parseInt(m[2], 10) - 1,
-    column: parseInt(m[3], 10) - 1
+    column: parseInt(m[3], 10) - 1,
   };
 }

@@ -133,3 +133,24 @@ export function resolveInstanceClass(binding) {
 
   return null;
 }
+
+export function safeInst(cb) {
+  if (isDev()) return cb;
+
+  return (path) => {
+    try {
+      cb(path);
+    } catch (err) {
+      path.insertBefore(
+        emitCall([
+          prop("event", strLiteral("inst_error")),
+          getLocProp(path.node, filepath),
+        ]),
+      );
+    }
+  };
+}
+
+export function isDev() {
+  return process.env.DEV;
+}

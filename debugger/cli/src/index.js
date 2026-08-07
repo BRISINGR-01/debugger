@@ -11,6 +11,7 @@ import {
   processEntry,
   removeDebugDir,
   throttle,
+  isDev,
 } from "./utils.js";
 import { run, killChild } from "./runner.js";
 import { watchChanges } from "./watcher.js";
@@ -23,8 +24,6 @@ function main() {
   );
 
   const debugDir = path.resolve(sourceDir, debugDirName);
-  removeDebugDir(debugDir);
-
   setUp(sourceDir, debugDir, exclude);
 
   let child = run(command, debugDir);

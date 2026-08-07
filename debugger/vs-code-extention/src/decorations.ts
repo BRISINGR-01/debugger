@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { TraceModel } from "./model";
-import { formatEventInline } from "./format";
+import { formatEventInline, formatEventMarkdown } from "./format";
 
 export class DecorationManager {
   private decorationType: vscode.TextEditorDecorationType;
@@ -82,8 +82,7 @@ export class DecorationManager {
     for (const idx of shown) {
       const ev = this.model.events[idx];
       const marker = idx === this.model.currentIndex ? "**→ current** " : "";
-      const text = formatEventInline(ev) ?? ev.event;
-      md.appendMarkdown(`${marker}\`t=${ev.time ?? "?"}\` ${text}\n\n`);
+      md.appendMarkdown(`${marker}${formatEventMarkdown(ev)}\n\n`);
     }
     if (history.length > shown.length) {
       md.appendMarkdown(`_…and ${history.length - shown.length} more_`);

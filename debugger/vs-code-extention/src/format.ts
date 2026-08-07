@@ -22,7 +22,7 @@ export function formatEventInline(ev: TraceEvent): string | undefined {
       if (!v) {
         return undefined;
       }
-      return `${v.name}: ${v.type} = ${truncate(v.value)}`;
+      return `${v.name}: ${v.type} = ${truncate(v.value ?? "undefined")}`;
     }
     case "call":
       return `→ ${ev.callee ?? "(call)"}`;
@@ -60,6 +60,22 @@ export function formatEventMarkdown(ev: TraceEvent): string {
         );
       }
       break;
+    case "change": {
+      if (ev.variable) {
+        lines.push(
+          `\`${ev.variable.name}: ${ev.variable.type} → ${ev.variable.value}\``,
+        );
+      }
+      if (ev.oldValue !== undefined) {
+        lines.push(`old value: \`${safeStringify(ev.oldValue)}\``);
+      }
+      break;
+    }
+    case "expr":
+      if (ev.value !== undefined) {
+        lines.push(`value: \`${safeStringify(ev.value)}\``);
+      }
+      break;
     case "call":
       lines.push(`callee: \`${ev.callee}\``);
       break;
@@ -78,6 +94,17 @@ export function formatEventMarkdown(ev: TraceEvent): string {
     case "throw":
       lines.push(`error: \`${safeStringify(ev.error)}\``);
       break;
+    default: {
+      const known = new Set(["event", "time", "loc", "fn_id"]);
+      const extras = Object.entries(ev)
+        .filter(([k]) => !known.has(k))
+        .map(([k, v]) => `- \`${k}: ${truncate(safeStringify(v), 200)}\``);
+      if (extras.length) {
+        lines.push("details:");
+        lines.push(...extras);
+      }
+      break;
+    }
   }
   return lines.join("\n\n");
 }

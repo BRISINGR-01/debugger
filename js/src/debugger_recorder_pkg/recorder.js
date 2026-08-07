@@ -65,6 +65,8 @@ class Recorder {
   }
 
   async flush() {
+    console.log(JSON.stringify(this.queue));
+
     while (this.queue.length) {
       await this.sink.send(this.queue.shift());
     }
@@ -100,6 +102,7 @@ class Recorder {
 const isObj = (o) => o != null && typeof o === "object";
 
 function serialize(obj, depth = 2) {
+  if (typeof obj === "function") return "Function() { [native code] }";
   if (!isObj(obj)) return JSON.stringify(obj);
 
   const name = obj.constructor.name;

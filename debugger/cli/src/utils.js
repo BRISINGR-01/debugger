@@ -67,6 +67,12 @@ export function throttle(cb) {
 
 export function needsUpdate(src, dest) {
   return (
-    !fs.existsSync(dest) || fs.statSync(src).mtimeMs > fs.statSync(dest).mtimeMs
+    isDev() ||
+    !fs.existsSync(dest) ||
+    fs.statSync(src).mtimeMs > fs.statSync(dest).mtimeMs
   );
+}
+
+export function isDev() {
+  return process.env.DEV;
 }

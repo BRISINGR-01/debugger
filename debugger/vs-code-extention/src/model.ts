@@ -1,6 +1,7 @@
-import * as path from 'path';
-import { TraceEvent, ParsedLocation } from './types';
-import { parseLog, parseLoc } from './logParser';
+import * as path from "path";
+import { TraceEvent, ParsedLocation } from "./types";
+import { parseLog, parseLoc } from "./logParser";
+import { LogEvent } from "./json-spec";
 
 function normalizePath(p: string): string {
   return path.normalize(p);
@@ -39,14 +40,15 @@ export class TraceModel {
   }
 
   loadFromText(text: string): void {
-    const { events, errors } = parseLog(text);
-    this.parseErrors = errors;
+    // const { events, errors } = parseLog(text);
+    const events = JSON.parse(text) as LogEvent[];
+    this.parseErrors = [];
 
     // Sort by time when present; fall back to file order, stable.
     const withOrder = events.map((e, i) => ({ e, i }));
     withOrder.sort((a, b) => {
-      const at = typeof a.e.time === 'number' ? a.e.time : a.i;
-      const bt = typeof b.e.time === 'number' ? b.e.time : b.i;
+      const at = typeof a.e.time === "number" ? a.e.time : a.i;
+      const bt = typeof b.e.time === "number" ? b.e.time : b.i;
       return at - bt || a.i - b.i;
     });
 

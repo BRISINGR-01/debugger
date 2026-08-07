@@ -9,16 +9,7 @@
  */
 
 import * as t from "@babel/types";
-import {
-  createVar,
-  emitCall,
-  getFuncName,
-  getLocProp,
-  isModuleExport,
-  prop,
-  resolveInstanceClass,
-  strLiteral,
-} from "./utils.js";
+import { getFuncName, safeInst, strLiteral } from "./utils.js";
 import { wrapFunctionBody } from "./wrapFunctionBody.js";
 import expressions from "./expressions.js";
 
@@ -28,8 +19,8 @@ export default function recorderPlugin({ types }) {
   return {
     visitor: {
       Program(path, state) {
-        this.uid = 0
-        this.filepath = state.filename;
+        globalThis.uid = 0;
+        globalThis.filepath = state.filename;
         const moduleName = "__debugger_recorder";
         const moduleType = state.opts.moduleType;
 
@@ -69,16 +60,16 @@ export default function recorderPlugin({ types }) {
       },
 
       // ── Functions ──────────────────────────────────────────────────────────
-      FunctionDeclaration(path) {
-        wrapFunctionBody(path, getFuncName(path), this.filepath);
-      },
-      FunctionExpression(path) {
-        wrapFunctionBody(path, getFuncName(path), this.filepath);
-      },
-      ArrowFunctionExpression(path) {
-        wrapFunctionBody(path, getFuncName(path), this.filepath);
-      },
-      ClassMethod(path) {
+      FunctionDeclaration: safeInst((path) =>
+        wrapFunctionBody(path, getFuncName(path)),
+      ),
+      FunctionExpression: safeInst((path) =>
+        wrapFunctionBody(path, getFuncName(path)),
+      ),
+      ArrowFunctionExpression: safeInst((path) =>
+        wrapFunctionBody(path, getFuncName(path)),
+      ),
+      ClassMethod: safeInst((path) => {
         const kind = path.node.kind; // constructor | method | get | set
         const className =
           path.parentPath?.parentPath?.node?.id?.name || "Class";
@@ -89,22 +80,22 @@ export default function recorderPlugin({ types }) {
           kind === "constructor"
             ? `new ${className}`
             : `${className}.${methodName}`;
-        wrapFunctionBody(path, label, this.filepath);
-      },
-      ObjectMethod(path) {
+        wrapFunctionBody(path, label);
+      }),
+      ObjectMethod: safeInst((path) => {
         const name = t.isIdentifier(path.node.key)
           ? path.node.key.name
           : "(computed)";
-        wrapFunctionBody(path, name, this.filepath);
-      },
+        wrapFunctionBody(path, name);
+      }),
 
-      SwitchCase(path) {
+      SwitchCase: safeInst((path) => {
         const { consequent } = path.node;
 
         if (consequent.length !== 1 || !t.isBlockStatement(consequent[0])) {
           path.node.consequent = [t.blockStatement(consequent)];
         }
-      },
+      }),
       ...expressions,
     },
   };
