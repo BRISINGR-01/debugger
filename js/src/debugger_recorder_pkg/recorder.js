@@ -87,6 +87,9 @@ class Recorder {
     };
 
     this.queue.push(ev);
+
+    if (event.variable) return event.variable.value;
+    if (event.value) return event.value;
   }
 
   genId() {
@@ -98,8 +101,6 @@ const isObj = (o) => o != null && typeof o === "object";
 
 function serialize(obj, depth = 2) {
   if (!isObj(obj)) return JSON.stringify(obj);
-
-  console.log(obj);
 
   const name = obj.constructor.name;
 

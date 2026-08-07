@@ -15,7 +15,7 @@ function main() {
   let b = 9;
   // const add_res = add(b, 9);
   b++;
-  b = 11;
+  b = 2 * (b + 11);
 
   "1".replace("1", "2");
   let d = [1, 4, 6].map((x) => c(c(c(x))));

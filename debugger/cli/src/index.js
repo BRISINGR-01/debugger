@@ -23,6 +23,7 @@ function main() {
   );
 
   const debugDir = path.resolve(sourceDir, debugDirName);
+  removeDebugDir(debugDir);
 
   setUp(sourceDir, debugDir, exclude);
 
