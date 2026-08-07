@@ -71,7 +71,6 @@ function singleLine(s: string): string {
 export function formatEventValue(ev: TraceEvent): string | undefined {
   switch (ev.event) {
     case "read":
-    case "declare":
     case "change":
       return ev.variable
         ? truncate(singleLine(safeStringify(ev.variable.value)), 80)
@@ -93,6 +92,35 @@ export function formatEventValue(ev: TraceEvent): string | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * Where an event's `(value)` annotation is placed (0-based):
+ * - assignments (`change`) sit right after the assigned variable name,
+ * - declarations (`declare`) sit right after the declared name when it can be
+ *   found, otherwise at the end of the declaration,
+ * - everything else (reads, expressions, calls, …) sits right after the
+ *   expression it was recorded for.
+ *
+ * `lineText` must be the text of `loc.line`.
+ */
+export function annotationPosition(
+  ev: TraceEvent,
+  loc: ParsedLocation,
+  lineText: string,
+): { line: number; character: number } {
+  const name = ev.variable?.name;
+  if (ev.event === "change" && name) {
+    return { line: loc.line, character: loc.column + name.length };
+  }
+  if (ev.event === "declare" && name) {
+    const text = lineText.slice(loc.column);
+    const m = /^(?:let|const|var)\s+[A-Za-z_$][\w$]*/.exec(text);
+    if (m) {
+      return { line: loc.line, character: loc.column + m[0].length };
+    }
+  }
+  return { line: loc.endLine, character: loc.endColumn };
 }
 
 /** Longer, multi-line markdown summary for hovers / tree items. */

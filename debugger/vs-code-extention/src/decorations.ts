@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { TraceModel } from "./model";
 import { TraceEvent, ParsedLocation } from "./types";
-import { formatEventValue, formatEventMarkdown } from "./format";
+import { annotationPosition, formatEventValue, formatEventMarkdown } from "./format";
 
 export class DecorationManager {
   private decorationType: vscode.TextEditorDecorationType;
@@ -87,32 +87,14 @@ export class DecorationManager {
     editor.setDecorations(this.decorationType, options);
   }
 
-  /**
-   * Where the value annotation should appear:
-   * - assignments (`change`) sit right after the assigned variable name,
-   * - declarations (`declare`) sit right after the declared name when it can
-   *   be found, otherwise at the end of the declaration,
-   * - everything else (reads, expressions, calls, …) sits right after the
-   *   expression it was recorded for.
-   */
+  /** Clamped annotation position using the shared layout rules. */
   private annotationPosition(
     document: vscode.TextDocument,
     ev: TraceEvent,
     loc: ParsedLocation,
-  ): vscode.Position | undefined {
-    const name = ev.variable?.name;
-    if (ev.event === "change" && name) {
-      return new vscode.Position(loc.line, loc.column + name.length);
-    }
-    if (ev.event === "declare" && name) {
-      const line = Math.min(Math.max(loc.line, 0), document.lineCount - 1);
-      const text = document.lineAt(line).text.slice(loc.column);
-      const m = /^(?:let|const|var)\s+[A-Za-z_$][\w$]*/.exec(text);
-      if (m) {
-        return new vscode.Position(line, loc.column + m[0].length);
-      }
-    }
-    return new vscode.Position(loc.endLine, loc.endColumn);
+  ): { line: number; character: number } | undefined {
+    if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
+    return annotationPosition(ev, loc, document.lineAt(loc.line).text);
   }
 
   private buildHover(filePath: string, line: number): vscode.MarkdownString {
@@ -140,8 +122,8 @@ export class DecorationManager {
 
 /**
  * True if the new event should win over the existing one at the same
- * annotation position: variable events (declare/change) trump calls trump
- * sub-expressions; among equals the innermost (smallest) range wins.
+ * annotation position: variable changes trump calls trump sub-expressions;
+ * among equals the innermost (smallest) range wins.
  */
 function better(
   a: TraceEvent,
@@ -159,7 +141,6 @@ function better(
 
 function priority(ev: TraceEvent): number {
   switch (ev.event) {
-    case "declare":
     case "change":
       return 0;
     case "call":

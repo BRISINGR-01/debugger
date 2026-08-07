@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { TraceModel } from "./model";
 import { DecorationManager } from "./decorations";
 import { TimelineProvider } from "./timelineProvider";
-import { formatEventMarkdown } from "./format";
+import { annotationPosition, formatEventMarkdown, formatEventValue } from "./format";
 
 export function activate(context: vscode.ExtensionContext): void {
   const model = new TraceModel();
@@ -191,13 +191,17 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         if (covering.length > 0) {
           // Scope the hover to the event whose recorded range covers the
-          // cursor (innermost first), and highlight that range in the editor.
+          // cursor (innermost first), and highlight that range — including any
+          // inline `(value)` annotation rendered over/after it — in the editor.
           const idx = bestCoveringEvent(model, covering);
-          const range = rangeOf(model, document, idx);
+          const range = hoverRangeOf(model, document, idx);
+          const snippetRange = rangeOf(model, document, idx);
           const md = new vscode.MarkdownString();
           md.isTrusted = false;
-          if (range) {
-            md.appendMarkdown("```\n" + document.getText(range) + "\n```\n\n");
+          if (snippetRange) {
+            md.appendMarkdown(
+              "```\n" + document.getText(snippetRange) + "\n```\n\n",
+            );
           }
           md.appendMarkdown(`### ${formatEventMarkdown(model.events[idx])}\n`);
           const others = history.filter((i) => i !== idx).length;
@@ -280,6 +284,41 @@ function rangeOf(
     document.lineAt(endLine).text.length,
   );
   return new vscode.Range(loc.line, startChar, endLine, endChar);
+}
+
+/**
+ * The editor range to highlight for an event: its recorded location, extended
+ * to also cover the inline `(value)` annotation rendered after it when that
+ * annotation sits beyond the recorded end (e.g. a read `a` highlights as
+ * `a(5)`, a whole-expression `a + b` as `a(5) + b(10)`). When the annotation
+ * already falls inside the recorded range (an assignment like `c(15) = a + b`),
+ * the recorded range is highlighted as-is so the hint is naturally included.
+ */
+function hoverRangeOf(
+  model: TraceModel,
+  document: vscode.TextDocument,
+  idx: number,
+): vscode.Range | undefined {
+  const loc = model.locations[idx];
+  const base = rangeOf(model, document, idx);
+  if (!loc || !base) return undefined;
+
+  const value = formatEventValue(model.events[idx]);
+  if (!value) return base;
+
+  const startLine = Math.min(Math.max(loc.line, 0), document.lineCount - 1);
+  const pos = annotationPosition(
+    model.events[idx],
+    loc,
+    document.lineAt(startLine).text,
+  );
+  const posLine = Math.min(Math.max(pos.line, 0), document.lineCount - 1);
+  const annotationEnd = new vscode.Position(
+    posLine,
+    pos.character + value.length + 2,
+  );
+  if (!annotationEnd.isAfter(base.end)) return base;
+  return new vscode.Range(base.start, annotationEnd);
 }
 
 function revealCurrent(model: TraceModel): void {

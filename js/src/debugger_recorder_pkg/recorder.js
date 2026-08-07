@@ -94,7 +94,7 @@ class Recorder {
 
     this.queue.push(ev);
 
-    if (event.value) return event.value;
+    if (event.value !== undefined) return event.value;
     return valueToReturn;
   }
 
