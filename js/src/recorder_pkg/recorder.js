@@ -73,28 +73,18 @@ class Recorder {
   }
 
   emit(event) {
-    let valueToReturn;
+    let valueToReturn = event.value ?? event.error;
     if (event.variable) {
       valueToReturn = event.variable.value;
       event.variable.value = serialize(event.variable.value);
     }
-    if (event.oldValue) {
-      valueToReturn = event.oldValue;
-      event.oldValue = serialize(event.oldValue);
-    }
-    if (event.error) {
-      valueToReturn = event.error;
-      event.error = serialize(event.error);
-    }
+    if (event.error) event.error = serialize(event.error);
 
-    const ev = {
+    this.queue.push({
       time: +(now() - this.#startTime).toFixed(3),
       ...event,
-    };
+    });
 
-    this.queue.push(ev);
-
-    if (event.value !== undefined) return event.value;
     return valueToReturn;
   }
 
@@ -117,12 +107,9 @@ function serialize(obj, depth = 2) {
 
     return JSON.stringify(res);
   }
+  if (Error.isError(obj)) return obj.toString();
 
   const name = obj.constructor.name;
-
-  if (name === "Error") {
-    return `Error: "${obj.message ?? "No message"}"`;
-  }
 
   let res = `${name === "Object" ? "" : `${name} `} {\n`;
   for (const key in obj) {

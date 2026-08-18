@@ -9,19 +9,19 @@ import {
   debugDirName,
   makeSymlink,
   processEntry,
-  removeDebugDir,
   throttle,
-  isDev,
 } from "./utils.js";
 import { run, killChild } from "./runner.js";
 import { watchChanges } from "./watcher.js";
 import instrumenters, { chooseInstrumenter } from "./instrumenters.js";
-import "server";
+import { startServer } from "server";
 
 function main() {
   const { command, exclude, sourceDir, singleRun, shouldRestart } = parseArgs(
     process.argv,
   );
+
+  startServer();
 
   const debugDir = path.resolve(sourceDir, debugDirName);
   setUp(sourceDir, debugDir, exclude);

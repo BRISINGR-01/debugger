@@ -9,7 +9,12 @@
  */
 
 import * as t from "@babel/types";
-import { getFuncName, safeInst, strLiteral } from "./utils.js";
+import {
+  getFuncName,
+  markInstrumented,
+  safeInst,
+  strLiteral,
+} from "./utils.js";
 import { wrapFunctionBody } from "./wrapFunctionBody.js";
 import expressions from "./expressions.js";
 
@@ -20,7 +25,7 @@ export default function recorderPlugin({ types }) {
     visitor: {
       Program(path, state) {
         globalThis.uid = 0;
-        globalThis.filepath = state.filename;
+        globalThis.filepath = state.filename.replace(state.cwd + "/", "");
         const moduleName = "__debugger_recorder";
         const moduleType = state.opts.moduleType;
 
@@ -33,11 +38,21 @@ export default function recorderPlugin({ types }) {
         )
           return;
 
-        const fnId = t.variableDeclaration("const", [
-          t.variableDeclarator(t.identifier("__fn_id"), strLiteral("0")),
-        ]);
-        fnId._instrumented = true;
+        const fnId = markInstrumented(
+          t.variableDeclaration("const", [
+            t.variableDeclarator(t.identifier("__fn_id"), strLiteral("global")),
+          ]),
+        );
+        const ctxId = markInstrumented(
+          t.variableDeclaration("const", [
+            t.variableDeclarator(
+              t.identifier("__ctx_id"),
+              strLiteral("global"),
+            ),
+          ]),
+        );
         path.unshiftContainer("body", fnId);
+        path.unshiftContainer("body", ctxId);
 
         // insert import to recorder.js
         if (moduleType === "module") {

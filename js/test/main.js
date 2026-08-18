@@ -2,7 +2,8 @@
 
 class SomeClass {
   rw() {
-    throw new Error("some err");
+    a.a();
+    // throw new Error("some err");
   }
 }
 

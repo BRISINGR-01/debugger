@@ -3,6 +3,7 @@ import {
   emitCall,
   getLocProp,
   isModuleExport,
+  markInstrumented,
   prop,
   resolveInstanceClass,
   safeInst,
@@ -15,7 +16,6 @@ export default {
   // let x = expr  →  let x = expr; __recorder__.emit({type:"change", variable:"x", oldValue: undefined, newValue: x})
   VariableDeclaration: safeInst((path) => {
     // Skip our own injected declarations
-    if (path.node._instrumented) return;
     if (path.parent._instrumented) return;
 
     // Skip declarations inside for (let x = ...; ...; ...) loops — insertAfter
@@ -31,14 +31,18 @@ export default {
     const stmtsToInsert = [];
 
     for (const decl of declarations) {
-      if (!t.isIdentifier(decl.id)) continue; // skip destructuring for now
-      if (decl.init === null || decl.init === undefined) continue;
+      if (
+        decl._instrumented ||
+        !t.isIdentifier(decl.id) ||
+        decl.init === null ||
+        decl.init === undefined
+      )
+        continue;
 
       stmtsToInsert.push(
-        emitCall([
-          prop("event", strLiteral("declare")),
+        emitCall("declare", [
           prop("variable", createVar(decl.id.name, kind, decl.id)),
-          getLocProp(path.node, filepath),
+          getLocProp(path.node),
         ]),
       );
     }
@@ -50,8 +54,6 @@ export default {
 
   // ── Re-assignments: x = val, x += val, x++, ++x ───────────────────────
   AssignmentExpression: safeInst((path) => {
-    if (path.node._instrumented) return;
-
     const left = path.node.left;
     if (
       !(t.isIdentifier(left) || t.isMemberExpression(left)) ||
@@ -79,14 +81,13 @@ export default {
 
     // We need to wrap this in a sequence: ((__old = left), (left = right), emit(...), left)
     // But we should not recurse into our own assignment
-    path.node._instrumented = true;
 
     const newAssignment = t.assignmentExpression(
       "=",
       left,
       emitCall(
+        "change",
         [
-          prop("event", strLiteral("change")),
           prop(
             "variable",
             t.objectExpression([
@@ -96,26 +97,22 @@ export default {
             ]),
           ),
           prop("oldValue", t.cloneNode(left)),
-          getLocProp(path.node, filepath),
+          getLocProp(path.node),
         ],
         true,
       ),
     );
 
-    newAssignment._instrumented = true;
-    path.replaceWith(newAssignment);
+    path.replaceWith(markInstrumented(newAssignment));
   }),
 
   // ── Update expressions: x++, ++x, x--, --x ───────────────────────────
   UpdateExpression: safeInst((path) => {
-    if (path.node._instrumented) return;
     const arg = path.node.argument;
     if (!t.isIdentifier(arg)) return;
 
     const varName = arg.name;
     const oldId = t.identifier(`__old_${uid++}__`);
-
-    path.node._instrumented = true;
 
     const stmtPath = path.getStatementParent();
     if (!stmtPath) return;
@@ -123,30 +120,23 @@ export default {
     const oldDecl = t.variableDeclaration("let", [
       t.variableDeclarator(oldId, t.cloneNode(arg)),
     ]);
-    oldDecl._instrumented = true;
-    stmtPath.insertBefore(oldDecl);
+    stmtPath.insertBefore(markInstrumented(oldDecl));
 
-    path.replaceWith(
-      t.sequenceExpression([
-        path.node,
-        emitCall(
-          [
-            prop("event", strLiteral("change")),
-            prop("variable", createVar(varName, "kind", t.cloneNode(arg))),
-            prop("oldValue", oldId),
-            getLocProp(path.node, filepath),
-          ],
-          true,
-        ),
-        t.cloneNode(arg),
-      ]),
+    path.insertAfter(
+      emitCall(
+        "change",
+        [
+          prop("variable", createVar(varName, "kind", t.cloneNode(arg))),
+          prop("oldValue", oldId),
+          getLocProp(path.node),
+        ],
+        true,
+      ),
+      t.cloneNode(arg),
     );
     path.skip();
   }),
   CallExpression: safeInst((path) => {
-    if (path.node._instrumented) return;
-    path.node._instrumented = true;
-
     const callee = path.node.callee;
     let calleeId = callee.name;
     if (t.isMemberExpression(callee)) {
@@ -176,11 +166,10 @@ export default {
     }
 
     path.replaceWith(
-      emitCall([
-        prop("event", strLiteral("call")),
+      emitCall("call", [
         prop("callee", strLiteral(calleeId)),
         prop("value", path.node), // original call, now nested — still evaluates & returns its real result
-        getLocProp(path.node, filepath),
+        getLocProp(path.node),
       ]),
     );
     // no skip(): lets ReferencedIdentifier/other visitors still process
@@ -191,24 +180,19 @@ export default {
   // Wraps each operand individually so short-circuit evaluation order is
   // preserved (only the operands actually evaluated get "seen" by emit).
   LogicalExpression: safeInst((path) => {
-    if (path.node._instrumented) return;
-    path.node._instrumented = true;
-
     const leftPath = path.get("left");
     leftPath.replaceWith(
-      emitCall([
-        prop("event", strLiteral("expression")),
+      emitCall("expression", [
         prop("value", leftPath.node),
-        getLocProp(leftPath.node, filepath),
+        getLocProp(leftPath.node),
       ]),
     );
 
     const rightPath = path.get("right");
     rightPath.replaceWith(
-      emitCall([
-        prop("event", strLiteral("expr")),
+      emitCall("expression", [
         prop("value", rightPath.node),
-        getLocProp(rightPath.node, filepath),
+        getLocProp(rightPath.node),
       ]),
     );
     // No path.skip(): lets traversal descend into the wrapped operands so
@@ -219,41 +203,22 @@ export default {
   // Wraps the whole test expression in an outer emit, on top of whatever
   // LogicalExpression already did to its operands.
   IfStatement: safeInst((path) => {
-    if (path.node._instrumented) return;
-    path.node._instrumented = true;
-
     const testPath = path.get("test");
     testPath.replaceWith(
-      emitCall([
-        prop("event", strLiteral("if")),
-        getLocProp(testPath.node, filepath),
-        prop("value", testPath.node),
-      ]),
+      emitCall("if", [getLocProp(testPath.node), prop("value", testPath.node)]),
     );
     // No path.skip(): lets the LogicalExpression visitor still process the
     // original test expression now nested as the emit's value argument.
   }),
   BinaryExpression: safeInst((path) => {
-    if (path.node._instrumented) return;
-    path.node._instrumented = true;
-
     path.replaceWith(
-      emitCall([
-        prop("event", strLiteral("expr")),
-        prop("value", path.node),
-        getLocProp(path.node, filepath),
-      ]),
+      emitCall("expression", [prop("value", path.node), getLocProp(path.node)]),
     );
     // No skip(): lets traversal descend into the now-nested original node,
     // so `a * 3` inside `2 * (a * 3)` also gets wrapped.
   }),
   ReferencedIdentifier: safeInst((path) => {
-    if (path.node._instrumented) return;
-
     const varName = path.node.name;
-
-    // skip our own injected machinery (__recorder__, __fn_id, __old_N__, etc.)
-    if (varName.startsWith("__")) return;
 
     // skip the function name itself in `fn(...)` / `new Fn(...)` — the
     // callee is already reported by the "call" event
@@ -267,14 +232,12 @@ export default {
     // only track real bindings (skip globals like Math, console, etc.)
     if (!path.scope.getBinding(varName)) return;
 
-    path.node._instrumented = true;
-
     path.replaceWith(
       emitCall(
+        "read",
         [
-          prop("event", strLiteral("read")),
           prop("variable", createVar(varName, "kind", t.cloneNode(path.node))),
-          getLocProp(path.node, filepath),
+          getLocProp(path.node),
         ],
         true,
       ),

@@ -1,14 +1,20 @@
 import * as vscode from "vscode";
 import { TraceModel } from "./model";
 import { TraceEvent, ParsedLocation } from "./types";
-import { annotationPosition, formatEventValue, formatEventMarkdown } from "./format";
+import {
+  annotationPosition,
+  formatEventValue,
+  formatEventMarkdown,
+} from "./format";
 
 export class DecorationManager {
   private decorationType: vscode.TextEditorDecorationType;
+  private throwDecorationType: vscode.TextEditorDecorationType;
   private enabled = true;
 
   constructor(private model: TraceModel) {
     this.decorationType = this.createDecorationType();
+    this.throwDecorationType = this.createThrowDecorationType();
   }
 
   private createDecorationType(): vscode.TextEditorDecorationType {
@@ -25,6 +31,13 @@ export class DecorationManager {
     });
   }
 
+  private createThrowDecorationType(): vscode.TextEditorDecorationType {
+    return vscode.window.createTextEditorDecorationType({
+      isWholeLine: false,
+      textDecoration: "underline #f14c4c",
+    });
+  }
+
   toggle(): void {
     this.enabled = !this.enabled;
   }
@@ -38,6 +51,7 @@ export class DecorationManager {
 
     if (!this.enabled || !this.model.loaded) {
       editor.setDecorations(this.decorationType, []);
+      editor.setDecorations(this.throwDecorationType, []);
       return;
     }
 
@@ -45,6 +59,7 @@ export class DecorationManager {
     const indices = this.model.getFileEventIndices(filePath);
     if (indices.length === 0) {
       editor.setDecorations(this.decorationType, []);
+      editor.setDecorations(this.throwDecorationType, []);
       return;
     }
 
@@ -52,6 +67,7 @@ export class DecorationManager {
     const current = this.model.currentIndex;
     // annotation position ("line:col") -> best event index to annotate there
     const best = new Map<string, number>();
+    const throwOptions: vscode.DecorationOptions[] = [];
 
     for (const idx of indices) {
       if (idx > current) break;
@@ -59,6 +75,18 @@ export class DecorationManager {
       const ev = this.model.events[idx];
       const loc = this.model.locations[idx];
       if (!loc) continue;
+
+      if (ev.event === "throw") {
+        const range = this.throwRange(document, loc);
+        if (range) {
+          const md = new vscode.MarkdownString();
+          md.isTrusted = false;
+          md.appendMarkdown(`**Throw**\n\n${formatEventMarkdown(ev)}`);
+          throwOptions.push({ range, hoverMessage: md });
+        }
+        continue;
+      }
+
       if (!formatEventValue(ev)) continue;
 
       const pos = this.annotationPosition(document, ev, loc);
@@ -67,7 +95,10 @@ export class DecorationManager {
 
       const key = `${pos.line}:${pos.character}`;
       const prev = best.get(key);
-      if (prev === undefined || better(ev, loc, this.model.events[prev], this.model.locations[prev]!)) {
+      if (
+        !prev ||
+        better(ev, loc, this.model.events[prev], this.model.locations[prev]!)
+      ) {
         best.set(key, idx);
       }
     }
@@ -79,12 +110,33 @@ export class DecorationManager {
       const pos = this.annotationPosition(document, ev, loc)!;
       const text = formatEventValue(ev)!;
       options.push({
-        range: new vscode.Range(pos.line, pos.character, pos.line, pos.character),
+        range: new vscode.Range(
+          pos.line,
+          pos.character,
+          pos.line,
+          pos.character,
+        ),
         renderOptions: { after: { contentText: `(${text})` } },
         hoverMessage: this.buildHover(filePath, loc.line),
       });
     }
     editor.setDecorations(this.decorationType, options);
+    editor.setDecorations(this.throwDecorationType, throwOptions);
+  }
+
+  /**
+   * Marker range for a throw event: the line the throw actually happened on
+   * (the event's recorded start line), from its start column to end of line.
+   * No source scanning — only lines recorded as throwing get a marker.
+   */
+  private throwRange(
+    document: vscode.TextDocument,
+    loc: ParsedLocation,
+  ): vscode.Range | undefined {
+    if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
+    const lineText = document.lineAt(loc.line).text;
+    const startChar = Math.min(loc.column, lineText.length);
+    return new vscode.Range(loc.line, startChar, loc.line, lineText.length);
   }
 
   /** Clamped annotation position using the shared layout rules. */
@@ -117,13 +169,16 @@ export class DecorationManager {
 
   dispose(): void {
     this.decorationType.dispose();
+    this.throwDecorationType.dispose();
   }
 }
 
 /**
  * True if the new event should win over the existing one at the same
  * annotation position: variable changes trump calls trump sub-expressions;
- * among equals the innermost (smallest) range wins.
+ * among equals the innermost (smallest) range wins; and when two entries are
+ * otherwise identical (e.g. a variable read at the same spot on every loop
+ * iteration) the later entry in the log wins, so the latest value shows.
  */
 function better(
   a: TraceEvent,
@@ -136,7 +191,8 @@ function better(
   if (pa !== pb) return pa < pb;
   const aa = area(aloc);
   const ab = area(bloc);
-  return aa < ab;
+  if (aa !== ab) return aa < ab;
+  return true;
 }
 
 function priority(ev: TraceEvent): number {

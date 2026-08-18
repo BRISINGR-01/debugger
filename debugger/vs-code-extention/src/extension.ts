@@ -2,10 +2,18 @@ import * as vscode from "vscode";
 import { TraceModel } from "./model";
 import { DecorationManager } from "./decorations";
 import { TimelineProvider } from "./timelineProvider";
-import { annotationPosition, formatEventMarkdown, formatEventValue } from "./format";
+import {
+  annotationPosition,
+  formatEventMarkdown,
+  formatEventValue,
+} from "./format";
+import { startServer } from "server";
 
 export function activate(context: vscode.ExtensionContext): void {
   const model = new TraceModel();
+  console.log(2);
+
+  startServer().then(model.connectToSocket);
   const decorations = new DecorationManager(model);
   const timelineProvider = new TimelineProvider(model);
   const statusBar = vscode.window.createStatusBarItem(
@@ -56,7 +64,6 @@ export function activate(context: vscode.ExtensionContext): void {
         const out = vscode.window.createOutputChannel("Trace Viewer");
         for (const err of model.parseErrors) {
           out.appendLine(`--- parse error: ${err.message} ---`);
-          out.appendLine(err.chunk);
           out.appendLine("");
         }
         out.show(true);
@@ -180,9 +187,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         const filePath = document.uri.fsPath;
         const history = model.getLineHistory(filePath, position.line);
-        if (history.length === 0) {
-          return undefined;
-        }
+        if (history.length === 0) return;
 
         const covering = model.getEventsAt(
           filePath,
@@ -267,10 +272,7 @@ function rangeOf(
   if (!loc) return undefined;
   if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
 
-  const startChar = Math.min(
-    loc.column,
-    document.lineAt(loc.line).text.length,
-  );
+  const startChar = Math.min(loc.column, document.lineAt(loc.line).text.length);
   if (loc.endLine === loc.line) {
     const endChar = Math.min(
       loc.endColumn,
@@ -279,10 +281,7 @@ function rangeOf(
     return new vscode.Range(loc.line, startChar, loc.line, endChar);
   }
   const endLine = Math.min(loc.endLine, document.lineCount - 1);
-  const endChar = Math.min(
-    loc.endColumn,
-    document.lineAt(endLine).text.length,
-  );
+  const endChar = Math.min(loc.endColumn, document.lineAt(endLine).text.length);
   return new vscode.Range(loc.line, startChar, endLine, endChar);
 }
 

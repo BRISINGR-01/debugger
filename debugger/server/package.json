@@ -5,9 +5,9 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "dev": "node server.js"
+    "dev": "node index.js solo"
   },
   "dependencies": {
     "express": "^5.2.1",

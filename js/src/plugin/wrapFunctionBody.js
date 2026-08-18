@@ -1,67 +1,35 @@
 import * as t from "@babel/types";
-import { emitCall, getLocProp, prop, strLiteral } from "./utils.js";
+import {
+  emitCall,
+  getLocProp,
+  markInstrumented,
+  prop,
+  strLiteral,
+} from "./utils.js";
+
 let _uid = 0;
 
 /**
  * Wraps a export function body so that:
  *  - On entry: emits { type:"enter", export function: name, args: {param: value, ...} }
  *  - On normal exit: emits { type:"exit", export function: name, returnVal: value }
- *  - On throw: emits { type:"throw", error: e } then re-throws
+ *  - Each `throw` statement emits { type:"throw", error: e, loc: <throw line> }
  */
-export function wrapFunctionBody(path, funcName, filepath) {
+export function wrapFunctionBody(path, funcName) {
   const node = path.node;
 
   // Skip already-instrumented or empty bodies
   if (!node.body || node.body._instrumented) return;
+  node.body._instrumented = true;
+
   // Arrow expressions like `x => x * 2` — convert to block first
   if (!t.isBlockStatement(node.body)) {
     node.body = t.blockStatement([t.returnStatement(node.body)]);
   }
 
-  node.body._instrumented = true;
+  const argsVars = (node.params || []).map(parseParam);
 
-  const params = node.params || [];
-
-  // Build args object: { paramName: paramValue, ... }
-  // We only handle simple Identifier params here; rest/destructured get a placeholder
-  const argsVars = params.map((p, idx) => {
-    if (t.isIdentifier(p)) {
-      return {
-        name: p.name,
-        type: "identifier",
-        value: t.identifier(p.name),
-      };
-    }
-
-    if (t.isAssignmentPattern(p) && t.isIdentifier(p.left)) {
-      return {
-        name: p.left.name,
-        type: "assignment",
-        value: t.identifier(p.left.name),
-      };
-    }
-
-    if (t.isRestElement(p) && t.isIdentifier(p.argument)) {
-      return {
-        name: p.argument.name,
-        type: "rest",
-        value: t.identifier(p.argument.name),
-      };
-    }
-
-    return {
-      name: `arg${idx}`,
-      type: "destructured",
-      value: t.memberExpression(
-        t.identifier("arguments"),
-        t.numericLiteral(idx),
-        true,
-      ),
-    };
-  });
-
-  const enterEmit = emitCall([
-    prop("event", strLiteral("enter")),
+  const enterEmit = emitCall("enter", [
     prop("function_name", strLiteral(funcName)),
     prop(
       "args",
@@ -75,62 +43,42 @@ export function wrapFunctionBody(path, funcName, filepath) {
         ),
       ),
     ),
-    getLocProp(node, filepath),
+    getLocProp(node),
   ]);
 
   // Unique result variable name per export function
-  const resultId = t.identifier(`__result_${_uid++}__`);
   const errId = t.identifier(`__err_${_uid++}__`);
 
   // We transform the body into:
   //   __recorder__.emit({ type:"enter", ... })
   //   let __result__
   //   try {
-  //     <original body with return replaced>
+  //     <original body>
   //     __recorder__.emit({ type:"exit", ..., returnVal: undefined })
   //   } catch(e) {
-  //     __recorder__.emit({ type:"throw", error: e })
-  //     throw e
+  //     throw e    // just re-throw; the throw was already recorded at its site
   //   }
 
   // Replace every ReturnStatement inside this export function (not nested ones)
   // with:  __result__ = value; __recorder__.emit(exit); return __result__
   const originalBody = node.body.body;
 
-  function replaceReturns(stmts, fnPath) {
-    // We do this by traversal after insertion; handled below via path.traverse
-  }
-
-  const exitEmit = (retVal, loc) => {
-    const props = [
-      prop("event", strLiteral("exit")),
-      prop("returnVal", retVal),
-    ];
+  const exitEmit = (retId, loc) => {
+    const props = [prop("returnVal", retId)];
     if (loc) props.push(loc);
-    return emitCall(props);
+    return emitCall("exit", props);
   };
 
+  const rethrow = markInstrumented(t.throwStatement(errId));
   const catchBlock = t.catchClause(
     errId,
-    t.blockStatement([
-      emitCall([prop("event", strLiteral("throw")), prop("error", errId)]),
-      t.throwStatement(errId),
-    ]),
+    t.blockStatement([emitCall("throw", [prop("error", errId)]), rethrow]),
   );
 
   const tryBlock = t.tryStatement(t.blockStatement(originalBody), catchBlock);
-
-  const fnId = t.variableDeclaration("const", [
-    t.variableDeclarator(
-      t.identifier("__fn_id"),
-      t.callExpression(
-        t.memberExpression(t.identifier("__recorder__"), t.identifier("genId")),
-        [],
-      ),
-    ),
-  ]);
-  fnId._instrumented = true;
-  node.body.body = [fnId, enterEmit, tryBlock];
+  const fnId = constructFnId(path);
+  const ctxId = constructCtxId();
+  node.body.body = [fnId, ctxId, enterEmit, tryBlock];
 
   // Now traverse the try block to replace return statements
   path.get("body").traverse({
@@ -140,22 +88,21 @@ export function wrapFunctionBody(path, funcName, filepath) {
       if (retPath.getFunctionParent() !== path || retPath.node._instrumented)
         return;
 
-      const retVal = retPath.node.argument || t.identifier("undefined");
-
-      const resultId = t.identifier("__return_val");
-
-      const decl = t.variableDeclaration("const", [
-        t.variableDeclarator(resultId, retVal),
-      ]);
-      decl._instrumented = true;
+      const resultId = t.identifier(`__return_val`);
+      const decl = markInstrumented(
+        t.variableDeclaration("const", [
+          t.variableDeclarator(
+            resultId,
+            retPath.node.argument || t.identifier("undefined"),
+          ),
+        ]),
+      );
 
       const exit = exitEmit(
         resultId,
-        retPath.node.loc ? getLocProp(retPath.node, filepath) : null,
+        retPath.node.loc ? getLocProp(retPath.node) : null,
       );
-
-      const ret = t.returnStatement(resultId);
-      ret._instrumented = true;
+      const ret = markInstrumented(t.returnStatement(resultId));
 
       retPath.replaceWithMultiple([decl, exit, ret]);
 
@@ -169,4 +116,70 @@ export function wrapFunctionBody(path, funcName, filepath) {
   const hasReturn = lastStmt && t.isReturnStatement(lastStmt);
 
   if (!hasReturn) tryBodyStmts.push(exitEmit(t.identifier("undefined")));
+}
+
+// Build args object: { paramName: paramValue, ... }
+// We only handle simple Identifier params here; rest/destructured get a placeholder
+function parseParam(p, idx) {
+  if (t.isIdentifier(p)) {
+    return {
+      name: p.name,
+      type: "identifier",
+      value: t.identifier(p.name),
+    };
+  }
+
+  if (t.isAssignmentPattern(p) && t.isIdentifier(p.left)) {
+    return {
+      name: p.left.name,
+      type: "assignment",
+      value: t.identifier(p.left.name),
+    };
+  }
+
+  if (t.isRestElement(p) && t.isIdentifier(p.argument)) {
+    return {
+      name: p.argument.name,
+      type: "rest",
+      value: t.identifier(p.argument.name),
+    };
+  }
+
+  return {
+    name: `arg${idx}`,
+    type: "destructured",
+    value: t.memberExpression(
+      t.identifier("arguments"),
+      t.numericLiteral(idx),
+      true,
+    ),
+  };
+}
+
+function constructFnId(path) {
+  return markInstrumented(
+    t.variableDeclaration("const", [
+      t.variableDeclarator(
+        t.identifier("__fn_id"),
+        strLiteral(`${filepath}:${path.node.loc.start.line}`),
+      ),
+    ]),
+  );
+}
+
+function constructCtxId() {
+  return markInstrumented(
+    t.variableDeclaration("const", [
+      t.variableDeclarator(
+        t.identifier("__ctx_id"),
+        t.callExpression(
+          t.memberExpression(
+            t.identifier("__recorder__"),
+            t.identifier("genId"),
+          ),
+          [],
+        ),
+      ),
+    ]),
+  );
 }

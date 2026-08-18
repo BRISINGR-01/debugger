@@ -27,9 +27,6 @@ export default function prepareDest(src, dest) {
   );
 
   if (!fs.existsSync(debuggerPkgPath)) {
-    fs.symlinkSync(
-      new URL("./debugger_recorder_pkg", import.meta.url),
-      debuggerPkgPath,
-    );
+    fs.symlinkSync(new URL("./recorder_pkg", import.meta.url), debuggerPkgPath);
   }
 }

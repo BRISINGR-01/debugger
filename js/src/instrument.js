@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { transformSync } from "@babel/core";
+
 function findPackageType(dir) {
   const pkg = path.join(dir, "package.json");
 

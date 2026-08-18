@@ -56,6 +56,11 @@ export type CatchEnterEvent = Event & {
   error: string;
 };
 
+export type InstError = Event & {
+  event: "inst_error";
+  message: string;
+};
+
 export type LogEvent =
   | CallEvent
   | EnterEvent
@@ -63,4 +68,5 @@ export type LogEvent =
   | DeclareEvent
   | ChangeEvent
   | TryEnterEvent
-  | CatchEnterEvent;
+  | CatchEnterEvent
+  | InstError;

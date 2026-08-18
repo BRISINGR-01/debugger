@@ -1,36 +1,33 @@
 import * as t from "@babel/types";
 
 /** Build: __recorder__.emit({ type, ...fields }) */
-export function emitCall(fields, isExpr = false) {
+export function emitCall(event, fields, isExpr = false) {
   fields.push(prop("fn_id", t.identifier("__fn_id")));
+  fields.push(prop("ctx_id", t.identifier("__ctx_id")));
+  fields.push(prop("event", strLiteral(event)));
 
   const expr = t.callExpression(
     t.memberExpression(t.identifier("__recorder__"), t.identifier("emit")),
     [t.objectExpression(fields)],
   );
-  expr._instrumented = true;
 
-  return isExpr ? expr : t.expressionStatement(expr);
+  return markInstrumented(isExpr ? expr : t.expressionStatement(expr));
 }
 
 export function createVar(name, type, val) {
-  return t.objectExpression([
-    prop("name", strLiteral(name)),
-    prop("type", strLiteral(type)),
-    prop("value", t.cloneNode(val)),
-  ]);
+  return markInstrumented(
+    t.objectExpression([
+      prop("name", strLiteral(name)),
+      prop("type", strLiteral(type)),
+      prop("value", t.cloneNode(val)),
+    ]),
+  );
 }
 
-export function strLiteral(s) {
-  return t.stringLiteral(s);
-}
+export const strLiteral = t.stringLiteral;
+export const prop = (key, value) => t.objectProperty(t.identifier(key), value);
 
-export function prop(key, value) {
-  value._instrumented = true;
-  return t.objectProperty(t.identifier(key), value);
-}
-
-export function getLocProp(node, filepath) {
+export function getLocProp(node) {
   return prop(
     "loc",
     t.objectExpression([
@@ -146,23 +143,35 @@ export function resolveInstanceClass(binding) {
   return null;
 }
 
-export function safeInst(cb) {
-  if (isDev()) return cb;
+export const safeInst = (cb) => (path) => {
+  if (path.node._instrumented) return;
+  path.node._instrumented = true;
 
-  return (path) => {
-    try {
-      cb(path);
-    } catch (err) {
-      path.insertBefore(
-        emitCall([
-          prop("event", strLiteral("inst_error")),
-          getLocProp(path.node, filepath),
+  try {
+    cb(path);
+  } catch (err) {
+    if (isDev()) throw err;
+
+    path.insertBefore(
+      markInstrumented(
+        emitCall("inst_error", [
+          prop("message", err.message),
+          getLocProp(path.node),
         ]),
-      );
-    }
-  };
-}
+      ),
+    );
+  }
+};
 
 export function isDev() {
   return process.env.DEV;
+}
+
+export function markInstrumented(node) {
+  t.traverseFast(node, (n) => {
+    n._instrumented = true;
+  });
+  // traverseFast doesn't visit the root itself in some versions — cover it explicitly
+  node._instrumented = true;
+  return node;
 }

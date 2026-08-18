@@ -1,7 +1,7 @@
 import * as path from "path";
 import { TraceEvent, ParsedLocation } from "./types";
-import { parseLog, parseLoc } from "./logParser";
-import { LogEvent } from "./json-spec";
+import { parseLoc } from "./logParser";
+import { InstError, LogEvent } from "./json-spec";
 
 function normalizePath(p: string): string {
   return path.normalize(p);
@@ -25,9 +25,11 @@ function lastIndexLTE(sorted: number[], target: number): number {
 }
 
 export class TraceModel {
+  socket: WebSocket | null = null;
+  connectionAttempts: number = 0;
   events: TraceEvent[] = [];
   locations: (ParsedLocation | undefined)[] = [];
-  parseErrors: { chunk: string; message: string }[] = [];
+  parseErrors: InstError[] = [];
 
   /** normalized file path -> (0-based line -> sorted ascending global event indices) */
   private byFile: Map<string, Map<number, number[]>> = new Map();
@@ -45,10 +47,36 @@ export class TraceModel {
     return this.events.length > 0;
   }
 
+  connectToSocket(port: number) {
+    this.socket = new WebSocket(`http://localhost:${port}`);
+
+    this.socket.onmessage = (ev) => {
+      let payload = ev.data;
+      if (
+        typeof payload === "string" &&
+        payload.trim().toLowerCase() === "clear"
+      ) {
+        return this.clear();
+      }
+
+      try {
+        this.loadFromText(payload);
+      } catch {
+        console.error("Invalid payload: " + payload);
+      }
+    };
+
+    this.socket.onclose = () => {
+      if (++this.connectionAttempts < 100)
+        setTimeout(() => this.connectToSocket(port), 2000);
+    };
+
+    // this.socket.onerror = () => setStatus("error");
+  }
+
   loadFromText(text: string): void {
-    // const { events, errors } = parseLog(text);
     const events = JSON.parse(text) as LogEvent[];
-    this.parseErrors = [];
+    this.parseErrors = events.filter((ev) => ev.event === "inst_error");
 
     // Sort by time when present; fall back to file order, stable.
     const withOrder = events.map((e, i) => ({ e, i }));
@@ -65,9 +93,8 @@ export class TraceModel {
     this.fileEvents = new Map();
 
     this.locations.forEach((loc, idx) => {
-      if (!loc) {
-        return;
-      }
+      if (!loc) return;
+
       const key = normalizePath(loc.file);
       let fileMap = this.byFile.get(key);
       if (!fileMap) {
@@ -130,9 +157,9 @@ export class TraceModel {
     const file = normalizePath(filePath);
     const result: number[] = [];
 
-    const startIdx = this.byFile.get(file)?.get(line);
-    if (startIdx) {
-      for (const idx of startIdx) {
+    const startIdices = this.byFile.get(file)?.get(line);
+    if (startIdices) {
+      for (const idx of startIdices) {
         const loc = this.locations[idx];
         if (loc && character >= loc.column && character < loc.endColumn) {
           result.push(idx);
@@ -159,15 +186,13 @@ export class TraceModel {
   getCurrentStateForFile(filePath: string): Map<number, number> {
     const result = new Map<number, number>();
     const fileMap = this.byFile.get(normalizePath(filePath));
-    if (!fileMap) {
-      return result;
-    }
+    if (!fileMap) return result;
+
     for (const [line, indices] of fileMap.entries()) {
       const idx = lastIndexLTE(indices, this.currentIndex);
-      if (idx !== -1) {
-        result.set(line, idx);
-      }
+      if (idx !== -1) result.set(line, idx);
     }
+
     return result;
   }
 
@@ -180,6 +205,7 @@ export class TraceModel {
       this.currentIndex++;
       return true;
     }
+
     return false;
   }
 
@@ -188,6 +214,7 @@ export class TraceModel {
       this.currentIndex--;
       return true;
     }
+
     return false;
   }
 
