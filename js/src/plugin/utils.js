@@ -2,30 +2,46 @@ import * as t from "@babel/types";
 
 /** Build: __recorder__.emit({ type, ...fields }) */
 export function emitCall(event, fields, isExpr = false) {
-  fields.push(prop("fn_id", t.identifier("__fn_id")));
-  fields.push(prop("ctx_id", t.identifier("__ctx_id")));
-  fields.push(prop("event", strLiteral(event)));
-
   const expr = t.callExpression(
-    t.memberExpression(t.identifier("__recorder__"), t.identifier("emit")),
-    [t.objectExpression(fields)],
+    markInstrumented(
+      t.memberExpression(t.identifier("__recorder__"), t.identifier("emit")),
+    ),
+    [
+      t.objectExpression(
+        fields.concat(
+          prop("fn_id", t.identifier("__fn_id")),
+          prop("ctx_id", t.identifier("__ctx_id")),
+          prop("event", strLiteral(event)),
+        ),
+      ),
+    ],
   );
+  expr._instrumented = true;
 
-  return markInstrumented(isExpr ? expr : t.expressionStatement(expr));
+  if (isExpr) return expr;
+
+  const st = t.expressionStatement(expr);
+  st._instrumented = true;
+
+  return st;
 }
 
 export function createVar(name, type, val) {
-  return markInstrumented(
-    t.objectExpression([
-      prop("name", strLiteral(name)),
-      prop("type", strLiteral(type)),
-      prop("value", t.cloneNode(val)),
-    ]),
-  );
+  const expr = t.objectExpression([
+    prop("name", strLiteral(name)),
+    prop("type", strLiteral(type)),
+    prop("value", t.cloneNode(val), false),
+  ]);
+
+  expr._instrumented = true;
+  return expr;
 }
 
 export const strLiteral = t.stringLiteral;
-export const prop = (key, value) => t.objectProperty(t.identifier(key), value);
+export function prop(key, value, shouldMark = true) {
+  const res = t.objectProperty(t.identifier(key), value);
+  return shouldMark ? markInstrumented(res) : res;
+}
 
 export function getLocProp(node) {
   return prop(
@@ -155,7 +171,7 @@ export const safeInst = (cb) => (path) => {
     path.insertBefore(
       markInstrumented(
         emitCall("inst_error", [
-          prop("message", err.message),
+          prop("message", strLiteral(err.message)),
           getLocProp(path.node),
         ]),
       ),
@@ -168,10 +184,15 @@ export function isDev() {
 }
 
 export function markInstrumented(node) {
+  if (node._instrumented === 1) {
+    node._instrumented = true;
+    return;
+  }
+
+  node._instrumented = true;
   t.traverseFast(node, (n) => {
-    n._instrumented = true;
+    n._instrumented ??= true;
   });
   // traverseFast doesn't visit the root itself in some versions — cover it explicitly
-  node._instrumented = true;
   return node;
 }

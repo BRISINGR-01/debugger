@@ -8,4 +8,4 @@ dist
 node_modules
 .debug
 out/
-*log.txt
+*log.*

@@ -50,7 +50,7 @@ class Recorder {
         typeof process !== "undefined" &&
         process.env &&
         process.env.RECORDER_URL;
-      const sink = new ServerSink(url ?? "http://localhost:8000");
+      const sink = new ServerSink(url ?? "http://localhost:5634");
 
       sink.setUp();
       globalThis[GLOBAL_KEY] = new Recorder(sink);
@@ -133,7 +133,7 @@ class ServerSink {
 
   async send(ev) {
     try {
-      await fetch(`${this.url}/log`, {
+      return fetch(`${this.url}/log`, {
         method: "POST",
         body: JSON.stringify(ev),
         headers: {
@@ -141,8 +141,6 @@ class ServerSink {
           "Content-Type": "application/json",
         },
       });
-
-      return null;
     } catch (error) {
       if (error instanceof Error) return error;
       if (typeof error === "string") return new Error(error);
@@ -160,15 +158,21 @@ if (!globalThis[GLOBAL_KEY]) {
   globalThis[GLOBAL_KEY] = Recorder.instance();
 }
 
+let shuttingDown = false;
 async function shutdown(e) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   console.error(e);
 
-  await Recorder.instance().flush();
-  process.exit(0);
+  try {
+    await Recorder.instance().flush();
+  } catch (error) {
+    console.error(error);
+  }
+
+  process.exit(1);
 }
 
-process.on("beforeExit", shutdown);
 process.on("uncaughtException", shutdown);
 process.on("unhandledRejection", shutdown);
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);

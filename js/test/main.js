@@ -16,17 +16,18 @@ function main() {
   let b = 9;
   // const add_res = add(b, 9);
   b++;
+  b++;
   b = 2 * (b + 11);
 
-  "1".replace("1", "2");
-  let d = [1, 4, 6].map((x) => c(c(c(x))));
+  "121".replace("1", "2");
+  let d = [1, 2, 5].map((x) => c(c(c(x))));
   console.log(d);
 
   err(b);
 }
 
 function err(a) {
-  Error().stack;
+  console.info(Error().stack);
   let aa = new SomeClass();
   aa = new SomeClass();
   aa.rw();

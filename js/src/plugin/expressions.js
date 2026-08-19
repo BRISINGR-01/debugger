@@ -77,8 +77,6 @@ export default {
       varName = `${obj}.${prop}`;
     }
 
-    if (varName.startsWith("__old")) return;
-
     // We need to wrap this in a sequence: ((__old = left), (left = right), emit(...), left)
     // But we should not recurse into our own assignment
 
@@ -90,11 +88,8 @@ export default {
         [
           prop(
             "variable",
-            t.objectExpression([
-              t.objectProperty(t.identifier("name"), strLiteral(varName)),
-              t.objectProperty(t.identifier("type"), strLiteral("kind")),
-              t.objectProperty(t.identifier("value"), path.node.right),
-            ]),
+            createVar(varName, "kind-----", path.node.right),
+            false,
           ),
           prop("oldValue", t.cloneNode(left)),
           getLocProp(path.node),
@@ -102,8 +97,9 @@ export default {
         true,
       ),
     );
+    newAssignment._instrumented = true;
 
-    path.replaceWith(markInstrumented(newAssignment));
+    path.replaceWith(newAssignment);
   }),
 
   // ── Update expressions: x++, ++x, x--, --x ───────────────────────────
@@ -126,7 +122,7 @@ export default {
       emitCall(
         "change",
         [
-          prop("variable", createVar(varName, "kind", t.cloneNode(arg))),
+          prop("variable", createVar(varName, "kind", arg)),
           prop("oldValue", oldId),
           getLocProp(path.node),
         ],
@@ -212,7 +208,10 @@ export default {
   }),
   BinaryExpression: safeInst((path) => {
     path.replaceWith(
-      emitCall("expression", [prop("value", path.node), getLocProp(path.node)]),
+      emitCall("expression", [
+        prop("value", path.node, false),
+        getLocProp(path.node),
+      ]),
     );
     // No skip(): lets traversal descend into the now-nested original node,
     // so `a * 3` inside `2 * (a * 3)` also gets wrapped.
@@ -230,7 +229,8 @@ export default {
       return;
 
     // only track real bindings (skip globals like Math, console, etc.)
-    if (!path.scope.getBinding(varName)) return;
+    const bind = path.scope.getBinding(varName);
+    if (!bind || bind.kind === "module" || !bind.hasValue) return;
 
     path.replaceWith(
       emitCall(

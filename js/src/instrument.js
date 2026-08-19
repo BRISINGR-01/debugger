@@ -62,7 +62,7 @@ export default function instrumentFile(input, dest, destRoot) {
     comments: true,
     compact: false,
     retainLines: false,
-    sourceMaps: false,
+    sourceMaps: true,
   });
 
   if (!result?.code) {
@@ -70,5 +70,8 @@ export default function instrumentFile(input, dest, destRoot) {
   }
 
   fs.mkdirSync(path.dirname(dest), { recursive: true });
+  try {
+    if (fs.lstatSync(dest).isSymbolicLink()) fs.unlinkSync(dest);
+  } catch {}
   fs.writeFileSync(dest, result.code, "utf8");
 }
