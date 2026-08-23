@@ -21,7 +21,7 @@ const std::string construct_func_enter(const std::string &file, Loc &loc, const 
     return os.str();
 }
 
-const std::string constructArgs(std::ostringstream &os, clang::FunctionDecl *FD)
+const std::string constructArgs(clang::FunctionDecl *FD)
 {
     std::ostringstream os;
 
@@ -58,6 +58,8 @@ const std::string constructArgs(std::ostringstream &os, clang::FunctionDecl *FD)
            << type << "\")}";
     }
     os << "\n    }";
+
+    return os.str();
 }
 
 // void __func_return(int ctxId,

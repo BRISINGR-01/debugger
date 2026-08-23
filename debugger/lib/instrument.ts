@@ -11,11 +11,7 @@ import Config from "./config.ts";
 
 const jsInstrumenterPath = path.resolve(
   import.meta.dirname,
-  "../../instrumenters/js/src/index.js",
-);
-const cppInstrumenterPath = path.resolve(
-  import.meta.dirname,
-  "../../instrumenters/cpp/src/index.js",
+  "../../instrumenters/js/src",
 );
 
 type Instrumenter = {
@@ -30,7 +26,7 @@ type Instrumenter = {
 const JSInstrumenter: Instrumenter = {
   prepare(srcRoot: string, debugDir: string) {
     execSync(
-      `node ${jsInstrumenterPath} prepare-dest '${srcRoot}' '${debugDir}'`,
+      `node ${path.join(jsInstrumenterPath, "index.js")} prepare-dest '${srcRoot}' '${debugDir}'`,
     );
   },
   instrument(
@@ -40,10 +36,15 @@ const JSInstrumenter: Instrumenter = {
     debugDir: string,
   ) {
     execSync(
-      `node ${jsInstrumenterPath} instrument '${srcRoot}' '${pathInSrc}' '${targetPath}' '${debugDir}'`,
+      `node ${path.join(jsInstrumenterPath, "index.js")} instrument '${srcRoot}' '${pathInSrc}' '${targetPath}' '${debugDir}'`,
     );
   },
 };
+
+const cppInstrumenterPath = path.resolve(
+  import.meta.dirname,
+  "../../instrumenters/cpp/src/",
+);
 
 const CPPInstrumenter: Instrumenter = {
   prepare(srcRoot: string, debugDir: string) {
@@ -54,11 +55,15 @@ const CPPInstrumenter: Instrumenter = {
   instrument(
     srcRoot: string,
     pathInSrc: string,
-    targetPath: string,
+    pathInDbg: string,
     debugDir: string,
   ) {
     execSync(
-      `node ${jsInstrumenterPath} instrument '${srcRoot}' '${pathInSrc}' '${targetPath}' '${debugDir}'`,
+      `clang++ -std=c++17 -o /dev/null \
+        -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
+        -include ${path.resolve(cppInstrumenterPath, "recorder", "recorder.h")} \
+        -fplugin-arg-instrumenter-${pathInDbg}\
+        ${pathInSrc}  '${srcRoot}' '${pathInSrc}' '${pathInDbg}' '${debugDir}'`,
     );
   },
 };

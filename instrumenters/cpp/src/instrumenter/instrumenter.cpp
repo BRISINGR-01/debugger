@@ -38,7 +38,7 @@ extern "C" int plugin_is_GPL_compatible;
 #include <vector>
 
 #include "./include/utils.hpp"
-#include "./include/dbg_calls.hpp"
+#include "./include/construct_calls.hpp"
 
 class InstrumentVisitor : public RecursiveASTVisitor<InstrumentVisitor>
 {
@@ -81,7 +81,7 @@ public:
 
         // Insert after opening brace
         SourceLocation insertPt = CS->getLBracLoc().getLocWithOffset(1);
-        RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func, FD));
+        RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func));
 
         // ── Wrap return statements ────────────────────────────────────────────
         walkForReturns(CS, FD, func);
@@ -186,6 +186,7 @@ public:
 class InstrumenterConsumer : public ASTConsumer
 {
 public:
+    std::string outputFile;
     explicit InstrumenterConsumer(CompilerInstance &CI)
         : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts()) {}
 
@@ -241,17 +242,16 @@ public:
             if (!FE)
                 continue;
 
-            std::string outPath = std::string(FE->tryGetRealPathName()) + ".instrumented";
             std::error_code EC;
-            llvm::raw_fd_ostream os(outPath, EC, llvm::sys::fs::OF_Text);
+            llvm::raw_fd_ostream os(outputFile, EC, llvm::sys::fs::OF_Text);
             if (EC)
             {
-                llvm::errs() << "Cannot write " << outPath << ": "
+                llvm::errs() << "Cannot write " << outputFile << ": "
                              << EC.message() << "\n";
                 continue;
             }
             I->second.write(os);
-            llvm::outs() << "[instrumenter] wrote: " << outPath << "\n";
+            llvm::outs() << "[instrumenter] wrote: " << outputFile << "\n";
         }
     }
 
@@ -262,11 +262,17 @@ private:
 
 class InstrumenterAction : public PluginASTAction
 {
+
+private:
+    std::string outputFile;
+
 public:
     std::unique_ptr<ASTConsumer>
     CreateASTConsumer(CompilerInstance &CI, llvm::StringRef) override
     {
-        return std::make_unique<InstrumenterConsumer>(CI);
+        auto IC = std::make_unique<InstrumenterConsumer>(CI);
+        IC->outputFile = outputFile;
+        return IC;
     }
 
     bool ParseArgs(const CompilerInstance &,
@@ -274,10 +280,15 @@ public:
     {
         for (const auto &a : args)
         {
+            std::cout << a << std::endl;
             if (a == "-help")
             {
                 llvm::outs() << "Instrumenter plugin options:\n"
                                 "  (none yet)\n";
+            }
+            else
+            {
+                this->outputFile = a;
             }
         }
         return true;
