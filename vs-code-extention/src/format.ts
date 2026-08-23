@@ -58,6 +58,20 @@ export function formatEventInline(ev: TraceEvent): string | undefined {
         : "⏎ return";
     case "throw":
       return `⚠ throw${ev.error ? " " + truncate(safeStringify(ev.error)) : ""}`;
+    case "if": {
+      const val = String(ev.value);
+      const isTruthy = val !== "false" && val !== "0" && val !== "" && val !== "null" && val !== "undefined" && val !== "NaN";
+      return `◇ if ${truncate(val)} → ${isTruthy ? "then" : "else"}`;
+    }
+    case "if_branch": {
+      const name =
+        ev.branch === "then"
+          ? "then"
+          : ev.branch === "else_if"
+            ? `else if`
+            : `else`;
+      return `◆ ${name}`;
+    }
     default:
       return `• ${ev.event}`;
   }
@@ -93,6 +107,11 @@ export function formatEventValue(ev: TraceEvent): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** Compact single-line value string for a function argument. */
+export function formatArgValue(value: string): string {
+  return truncate(singleLine(safeStringify(value)), 80);
 }
 
 /**
@@ -187,6 +206,24 @@ export function formatEventMarkdown(ev: TraceEvent): string {
     case "throw":
       lines.push(`error: \`${safeStringify(ev.error)}\``);
       break;
+    case "if": {
+      const val = String(ev.value);
+      const isTruthy = val !== "false" && val !== "0" && val !== "" && val !== "null" && val !== "undefined" && val !== "NaN";
+      lines.push(
+        `\`${val}\` → **${isTruthy ? "then" : "else"}**`,
+      );
+      break;
+    }
+    case "if_branch": {
+      const branchName =
+        ev.branch === "then"
+          ? "then"
+          : ev.branch === "else_if"
+            ? `else if (#${ev.branchIndex})`
+            : `else (#${ev.branchIndex})`;
+      lines.push(`taken: **${branchName}**`);
+      break;
+    }
     default: {
       const known = new Set(["event", "time", "loc", "fn_id"]);
       const extras = Object.entries(ev)

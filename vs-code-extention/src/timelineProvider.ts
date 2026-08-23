@@ -58,6 +58,10 @@ export class TimelineProvider implements vscode.TreeDataProvider<number> {
         return new vscode.ThemeIcon("debug-step-out");
       case "throw":
         return new vscode.ThemeIcon("warning");
+      case "if":
+        return new vscode.ThemeIcon("branch");
+      case "if_branch":
+        return new vscode.ThemeIcon("git-branch");
       default:
         return new vscode.ThemeIcon("circle-outline");
     }

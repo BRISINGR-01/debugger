@@ -199,4 +199,32 @@ export class TraceModel {
   jumpTo(index: number): void {
     this.currentIndex = Math.max(-1, Math.min(index, this.events.length - 1));
   }
+
+  /** Find the index of the next `exit` event matching the `fn_id` of the `enter` at `enterIdx`. */
+  findExitForEnter(enterIdx: number): number | undefined {
+    const enter = this.events[enterIdx];
+    if (!enter || enter.event !== "enter" || enter.fn_id === undefined) {
+      return undefined;
+    }
+    const fnId = enter.fn_id;
+    for (let i = enterIdx + 1; i < this.events.length; i++) {
+      const ev = this.events[i];
+      if (ev.event === "exit" && ev.fn_id === fnId) {
+        return i;
+      }
+    }
+    return undefined;
+  }
+
+  /** All `enter` event indices for the given function name, in chronological order. */
+  findEntersForFn(functionName: string): number[] {
+    const result: number[] = [];
+    for (let i = 0; i < this.events.length; i++) {
+      const ev = this.events[i];
+      if (ev.event === "enter" && ev.function_name === functionName) {
+        result.push(i);
+      }
+    }
+    return result;
+  }
 }

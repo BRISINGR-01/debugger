@@ -8,6 +8,7 @@ export interface ArgInfo {
   name: string;
   type: string;
   value: string;
+  loc?: TraceLoc;
 }
 
 export interface TraceLoc {
@@ -38,6 +39,10 @@ export interface TraceEvent {
 
   // 'throw'
   error?: unknown;
+
+  // 'if_branch'
+  branch?: "then" | "else_if" | "else";
+  branchIndex?: number;
 
   [key: string]: unknown;
 }

@@ -37,55 +37,8 @@ extern "C" int plugin_is_GPL_compatible;
 #include <string>
 #include <vector>
 
-#define R_ARGS(fname, file, line) escape(fname) << "\", \"" << file << "\", " << line
-#define R_END ");\n"
-
-using namespace clang;
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-static std::string escape(std::string s)
-{
-    std::string out;
-    out.reserve(s.size());
-    for (char c : s)
-    {
-        if (c == '"' || c == '\\')
-            out += '\\';
-        out += c;
-    }
-    return out;
-}
-
-static std::string typeStr(QualType qt)
-{
-    return escape(qt.getUnqualifiedType().getAsString());
-}
-
-// Get the source text of an expression (may be empty on failure).
-static std::string exprText(const Expr *e, const SourceManager &SM,
-                            const LangOptions &LO)
-{
-    if (!e)
-        return {};
-    CharSourceRange r = CharSourceRange::getTokenRange(e->getSourceRange());
-    bool invalid = false;
-    StringRef s = Lexer::getSourceText(r, SM, LO, &invalid);
-    if (invalid)
-        return {};
-    return s.str();
-}
-
-// Source location → "file:line"
-static std::string locStr(SourceLocation loc, const SourceManager &SM)
-{
-    if (loc.isInvalid())
-        return "";
-    PresumedLoc pl = SM.getPresumedLoc(loc);
-    if (pl.isInvalid())
-        return "";
-    return escape(pl.getFilename()) + ":" + std::to_string(pl.getLine());
-}
+#include "./utils.hpp"
+#include "./dbg_calls.hpp"
 
 class InstrumentVisitor : public RecursiveASTVisitor<InstrumentVisitor>
 {
@@ -108,56 +61,29 @@ public:
         SourceLocation bodyStart = body->getBeginLoc();
         if (bodyStart.isInvalid() || SM.isInSystemHeader(bodyStart))
             return true;
+        SourceLocation bodyEnd = body->getEndLoc();
+        if (bodyEnd.isInvalid() || SM.isInSystemHeader(bodyEnd))
+            return true;
+        PresumedLoc p_start = SM.getPresumedLoc(bodyStart);
+        if (p_start.isInvalid())
+            return;
+        std::string file = p_start.getFilename();
 
         CompoundStmt *CS = dyn_cast<CompoundStmt>(body);
         if (!CS)
             return true;
 
-        std::string fname = FD->getQualifiedNameAsString();
-        std::string file = locStr(bodyStart, SM);
-        unsigned int line = SM.getPresumedLineNumber(bodyStart);
-
-        std::ostringstream entry;
-        entry << "  FuncScopeGuard __rsg__(\"" << R_ARGS(fname, file, line) << R_END
-              << "  __recorder__.func_enter(\""
-              << R_ARGS(fname, file, line);
-
-        bool hasParams = false;
-        for (const ParmVarDecl *P : FD->parameters())
-        {
-            if (P->getName().empty())
-                continue;
-            hasParams = true;
-        }
-
-        if (hasParams)
-        {
-            entry << ",\n    std::vector<ArgInfo>{\n";
-            bool first = true;
-            for (const ParmVarDecl *P : FD->parameters())
-            {
-                if (P->getName().empty())
-                    continue;
-                if (!first)
-                    entry << ",\n";
-                first = false;
-                std::string pname = P->getNameAsString();
-                std::string tname = typeStr(P->getType());
-                entry << "      ArgInfo{\"" << escape(pname) << "\", "
-                      << "ValueSnapshot::from(" << pname << ", \""
-                      << tname << "\")}";
-            }
-            entry << "\n    }";
-        }
-
-        entry << R_END;
+        std::string func = FD->getQualifiedNameAsString();
+        std::optional<Loc> location = getLoc(bodyStart, bodyEnd, SM);
+        if (!location.has_value())
+            return;
 
         // Insert after opening brace
         SourceLocation insertPt = CS->getLBracLoc().getLocWithOffset(1);
-        RW.InsertTextAfter(insertPt, entry.str());
+        RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func, FD));
 
         // ── Wrap return statements ────────────────────────────────────────────
-        instrumentReturns(CS, FD, fname);
+        walkForReturns(CS, FD, func);
 
         return true;
     }
@@ -493,15 +419,9 @@ private:
     std::vector<PendingAssign> pendingAssignments_;
 
     // Walk all ReturnStmts inside a FunctionDecl body and insert recorder call.
-    void instrumentReturns(CompoundStmt *CS, FunctionDecl *FD,
-                           const std::string &fname)
-    {
-        // We do a recursive walk manually since the visitor top-level call
-        // might descend into nested lambdas. We only want returns at this
-        // function level.
-        walkForReturns(CS, FD, fname);
-    }
-
+    // We do a recursive walk manually since the visitor top-level call
+    // might descend into nested lambdas. We only want returns at this
+    // function level.
     void walkForReturns(Stmt *S, FunctionDecl *FD, const std::string &fname)
     {
         if (!S)

@@ -13,12 +13,12 @@ function findPackageType(dir) {
   return "module";
 }
 
-export default function instrumentFile(input, dest, destRoot) {
+export default function instrumentFile(srcRoot, input, dest, destRoot) {
   const source = fs.readFileSync(input, "utf8");
 
   const result = transformSync(source, {
     filename: input,
-
+    cwd: srcRoot,
     // Let Babel determine whether this is ESM or CommonJS.
     sourceType: "unambiguous",
 

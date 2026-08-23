@@ -13,17 +13,19 @@ function c(s) {
 }
 
 function main() {
-  let b = 9;
+  let b = 2 * 8;
   // const add_res = add(b, 9);
   b++;
   b++;
   b = 2 * (b + 11);
 
-  "121".replace("1", "2");
-  let d = [1, 2, 5].map((x) => c(c(c(x))));
-  console.log(d);
-
-  err(b);
+  if ("1121".replace("1", "2") !== "2121") {
+    let d = [1, 2, 5].map((x) => c(c(c(x))));
+    console.log(d);
+  } else if (1 * 1) {
+    err(b);
+  } else {
+  }
 }
 
 function err(a) {

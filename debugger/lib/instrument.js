@@ -18,9 +18,9 @@ const instrumenters = {
     prepare(src, dest) {
       execSync(`node ${jsInstrumenterPath} prepareDest '${src}' '${dest}'`);
     },
-    instrument(srcPath, targetPath, debugDir) {
+    instrument(srcRoot, srcPath, targetPath, debugDir) {
       execSync(
-        `node ${jsInstrumenterPath} instrument '${srcPath}' '${targetPath}' '${debugDir}'`,
+        `node ${jsInstrumenterPath} instrument '${srcRoot}' '${srcPath}' '${targetPath}' '${debugDir}'`,
       );
     },
   },
@@ -36,7 +36,7 @@ export function chooseInstrumenter(file) {
   return null;
 }
 
-export function processEntry(srcPath, fileRelPath, debugDir) {
+export function processEntry(srcRoot, srcPath, fileRelPath, debugDir) {
   const inst = chooseInstrumenter(fileRelPath);
   if (!inst) return makeSymlink(srcPath, fileRelPath, debugDir);
 
@@ -44,7 +44,7 @@ export function processEntry(srcPath, fileRelPath, debugDir) {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
 
   try {
-    inst.instrument(srcPath, targetPath, debugDir);
+    inst.instrument(srcRoot, srcPath, targetPath, debugDir);
   } catch (error) {
     console.error(error);
     console.info(`[debugger] skipped "${fileRelPath}"`);
@@ -80,7 +80,7 @@ export function setupDebugDir(sourceDir, excludePatterns) {
         continue;
       }
 
-      processEntry(srcPath, relPath, debugDir);
+      processEntry(sourceDir, srcPath, relPath, debugDir);
     }
   }
 

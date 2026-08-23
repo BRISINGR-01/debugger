@@ -123,6 +123,22 @@ struct ArgInfo
   std::string name;
   ValueSnapshot value;
 };
+// ── Argument descriptor ───────────────────────────────────────────────────────
+
+struct Loc
+{
+  std::string file;
+  struct start
+  {
+    int line;
+    int col;
+  };
+  struct end
+  {
+    int line;
+    int col;
+  };
+};
 
 // ── Event kinds ───────────────────────────────────────────────────────────────
 enum class EventKind : uint8_t
@@ -179,8 +195,7 @@ struct RecorderEvent
   EventKind kind{EventKind::Custom};
   std::string func_name; // enclosing function
   std::string name;      // variable / branch label / etc.
-  std::string file;
-  int line{};
+  Loc loc;
   std::vector<ArgInfo> args;            // for FuncEnter: all params; for others: up to 1
   std::optional<ValueSnapshot> ret_val; // for FuncReturn
 
@@ -258,17 +273,16 @@ struct HistorySink : IRecorderSink
 };
 
 // ── The Recorder ──────────────────────────────────────────────────────────────
-class Recorder
+class DebuggerRecorder
 {
 public:
-  // Singleton used by generated code; users can also construct their own.
-  static Recorder &global()
+  static DebuggerRecorder &instance()
   {
-    static Recorder instance;
+    static DebuggerRecorder instance;
     return instance;
   }
 
-  Recorder()
+  DebuggerRecorder()
   {
     // Default: print to stderr AND keep history
     _stderr_sink = std::make_shared<StderrSink>();
@@ -280,13 +294,13 @@ public:
 
   void add_sink(std::shared_ptr<IRecorderSink> s)
   {
-    std::lock_guard<std::mutex> g(_mtx);
+    std::lock_guard<std::mutex> g(id_mtx);
     _sinks.push_back(std::move(s));
   }
 
   void set_stderr_enabled(bool on)
   {
-    std::lock_guard<std::mutex> g(_mtx);
+    std::lock_guard<std::mutex> g(id_mtx);
     if (on && !_stderr_sink)
     {
       _stderr_sink = std::make_shared<StderrSink>();
@@ -302,7 +316,7 @@ public:
 
   void emit(RecorderEvent ev)
   {
-    std::lock_guard<std::mutex> g(_mtx);
+    std::lock_guard<std::mutex> g(id_mtx);
     for (auto &s : _sinks)
       s->on_event(ev);
   }
@@ -475,14 +489,14 @@ public:
   }
 
 private:
-  std::mutex _mtx;
+  std::mutex id_mtx;
   std::vector<std::shared_ptr<IRecorderSink>> _sinks;
   std::shared_ptr<StderrSink> _stderr_sink;
   std::shared_ptr<HistorySink> _history_sink;
 };
 
 // ── Global accessor used by generated code ────────────────────────────────────
-inline Recorder &__recorder__ = Recorder::global();
+inline DebuggerRecorder &__recorder__ = DebuggerRecorder::instance();
 
 // ── RAII scope guard for functions (handles exits via exceptions) ──────────────
 struct FuncScopeGuard

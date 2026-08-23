@@ -29,7 +29,7 @@ function now() {
 
 class Recorder {
   #startTime;
-  #setupPromise = null;
+  #timeout = 0;
   queue = [];
   #id = 1; // 0 is global
 
@@ -65,8 +65,7 @@ class Recorder {
   }
 
   async flush() {
-    console.log(JSON.stringify(this.queue));
-
+    clearTimeout(this.#timeout);
     while (this.queue.length) {
       await this.sink.send(this.queue.shift());
     }
@@ -84,6 +83,9 @@ class Recorder {
       time: +(now() - this.#startTime).toFixed(3),
       ...event,
     });
+
+    clearTimeout(this.#timeout);
+    this.#timeout = setTimeout(() => this.flush(), 200);
 
     return valueToReturn;
   }

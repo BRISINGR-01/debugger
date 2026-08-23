@@ -67,9 +67,14 @@ auto multiply = [](int x, int y)
     return product;
 };
 
+int val(int);
+int val2(int);
+
 // ── Main ──────────────────────────────────────────────────────────────────
 int main()
 {
+    printf("%i\n", val(9));
+    printf("%i\n", val2(9));
     int x = 10, u = 10;
     int y = 20;
     y += 5;

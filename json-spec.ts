@@ -1,11 +1,12 @@
 export type Id = string;
+export type Loc = {
+  start: string;
+  end: string;
+};
 export type Event = {
   fn_id: Id; // for declaration/change it is the function in which it happens or "global_space" is not in a function
   time: number;
-  loc: {
-    start: string;
-    end: string;
-  };
+  loc: Loc;
 };
 
 export type Var = {
@@ -23,7 +24,7 @@ export type CallEvent = Event & {
 export type EnterEvent = Event & {
   event: "enter";
   function_name: string;
-  args: Var[];
+  args: ({ loc: Loc } & Var)[];
 };
 
 export type ExitEvent = Event & {
@@ -34,7 +35,6 @@ export type ExitEvent = Event & {
 export type DeclareEvent = Event & {
   event: "declare";
   variable: Var;
-  oldValue: string | null;
 };
 
 export type ChangeEvent = Event & {
@@ -43,7 +43,7 @@ export type ChangeEvent = Event & {
   oldValue: string;
 };
 
-export type ThrowEvent = Event & {
+export type ErrorEvent = Event & {
   error: string;
 };
 
@@ -54,6 +54,17 @@ export type TryEnterEvent = Event & {
 export type CatchEnterEvent = Event & {
   event: "catch_enter";
   error: string;
+};
+
+export type IfEvent = Event & {
+  event: "if";
+  value: string;
+};
+
+export type IfBranchEvent = Event & {
+  event: "if_branch";
+  branch: "then" | "else_if" | "else";
+  branchIndex: number;
 };
 
 export type InstError = Event & {
@@ -69,4 +80,6 @@ export type LogEvent =
   | ChangeEvent
   | TryEnterEvent
   | CatchEnterEvent
+  | IfEvent
+  | IfBranchEvent
   | InstError;

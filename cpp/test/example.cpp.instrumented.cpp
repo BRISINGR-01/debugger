@@ -40,7 +40,7 @@ double average(const std::vector<double> &values)
 {  FuncScopeGuard __rsg__("average", "example.cpp:30", 30);
   __recorder__.func_enter("average", "example.cpp:30", 30,
     std::vector<ArgInfo>{
-      ArgInfo{"values", ValueSnapshot::from(values, "const std::vector<double> &")}
+      ArgInfo{"values", ValueSnapshot::from(values, "const int &")}
     });
 
     if (bool mpty = values.empty())
@@ -54,13 +54,8 @@ double average(const std::vector<double> &values)
     double sum = 0.0; __recorder__.var_decl("average", "example.cpp:34", 34, "sum", sum, "double");
 
     for (double v : values)
-    { __recorder__.loop_iter("average", "example.cpp:35", 35, "for");
- __recorder__.var_decl("average", "example.cpp:35", 35, "v", v, "double");
-
+    {
         sum = sum + v;
-  /* [recorder] var_change: sum */
-  if (true) { __recorder__.var_change("average", "example.cpp:37", 37, "sum", sum, "double"); }
-
     }
     { auto __ret_val__ = (sum / static_cast<double>(values.size()));
   __recorder__.func_return("average", "example.cpp:39", 39, __ret_val__, "double");
@@ -267,7 +262,7 @@ int main()
     }
     else {  __recorder__.var_decl("main", "example.cpp:140", 140, "v", v, "int");
  __recorder__.branch_taken("main", "example.cpp:140", 140, "else");
-if (bool d = false)
+if (bool d = false) 
     { __recorder__.var_decl("main", "example.cpp:144", 144, "d", d, "_Bool");
  __recorder__.branch_taken("main", "example.cpp:144", 144, "then");
 

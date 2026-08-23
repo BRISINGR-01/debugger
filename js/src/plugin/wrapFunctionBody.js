@@ -27,20 +27,21 @@ export function wrapFunctionBody(path, funcName) {
     node.body = t.blockStatement([t.returnStatement(node.body)]);
   }
 
-  const argsVars = (node.params || []).map(parseParam);
-
   const enterEmit = emitCall("enter", [
     prop("function_name", strLiteral(funcName)),
     prop(
       "args",
       t.arrayExpression(
-        argsVars.map((v) =>
-          t.objectExpression([
-            prop("name", strLiteral(v.name)),
-            prop("type", t.unaryExpression("typeof", v.value)),
-            prop("value", v.value),
-          ]),
-        ),
+        (node.params || [])
+          .map(parseParam)
+          .map((v, i) =>
+            t.objectExpression([
+              prop("name", strLiteral(v.name)),
+              prop("type", t.unaryExpression("typeof", v.value)),
+              prop("value", v.value),
+              getLocProp(node.params[i]),
+            ]),
+          ),
       ),
     ),
     getLocProp(node),

@@ -44,7 +44,7 @@ export function watchChanges({
       !lstatSync(target).isSymbolicLink() &&
       (event === "add" || event === "change")
     ) {
-      processEntry(filePath, rel, debugDir);
+      processEntry(sourceDir, filePath, rel, debugDir);
       onChange();
     }
   });

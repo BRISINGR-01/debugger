@@ -4,6 +4,8 @@ project(Instrumenter C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(RecHeader "recorder/recorder.h")
+
 
 find_package(LLVM  REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
@@ -21,7 +23,13 @@ add_definitions(${LLVM_DEFINITIONS})
 # ── Instrumenter plugin shared library ───────────────────────────────────────
 # The plugin is dlopen'd by the host clang process, so all Clang/LLVM symbols
 # must be resolved at runtime from the host, not linked statically.
-add_library(Instrumenter MODULE instrumenter.cpp)
+add_library(Instrumenter MODULE instrumenter/instrumenter.cpp
+    instrumenter/type_logger.hpp
+    instrumenter/dbg_calls.hpp 
+    instrumenter/dbg_calls.cpp 
+    instrumenter/utils.cpp 
+    instrumenter/utils.hpp
+    )
 
 # clang-cpp provides all Clang libraries in a single convenient shared lib
 # (available since LLVM 10). Falls back to individual libs if needed.
@@ -56,7 +64,7 @@ endif()
 # ── Demo: compile example.cpp without the plugin (produces example_plain) ─────
 add_custom_target(demo_plain
     COMMAND ${CMAKE_CXX_COMPILER}
-            -include ${CMAKE_SOURCE_DIR}/recorder_runtime.h
+            -include ${CMAKE_SOURCE_DIR}/${RecHeader}
             -std=c++17
             ${CMAKE_SOURCE_DIR}/example.cpp
             -o ${CMAKE_BINARY_DIR}/example_plain
@@ -67,7 +75,7 @@ add_custom_target(demo_plain
 add_custom_target(demo_instrumented
     COMMAND ${CMAKE_CXX_COMPILER}
             -fplugin=$<TARGET_FILE:Instrumenter>
-            -include ${CMAKE_SOURCE_DIR}/recorder_runtime.h
+            -include ${CMAKE_SOURCE_DIR}/${RecHeader}
             -std=c++17
             ${CMAKE_SOURCE_DIR}/example.cpp
             -o ${CMAKE_BINARY_DIR}/example_instrumented
@@ -86,7 +94,7 @@ add_custom_target(run_demo
 add_custom_target(emit_rewritten
     COMMAND ${CMAKE_CXX_COMPILER}
             -fplugin=$<TARGET_FILE:Instrumenter>
-            -include ${CMAKE_SOURCE_DIR}/recorder_runtime.h
+            -include ${CMAKE_SOURCE_DIR}/${RecHeader}
             -std=c++17
             -fsyntax-only
             ${CMAKE_SOURCE_DIR}/example.cpp

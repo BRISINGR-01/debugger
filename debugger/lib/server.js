@@ -4,6 +4,8 @@ import { setupDebugDir } from "./instrument.js";
 import { run, killChild } from "./runner.js";
 import { watchChanges } from "./watcher.js";
 import HTTPServer from "./httpServer.js";
+import fs from "fs";
+import { isDev } from "./utils.js";
 
 export default class Debugger extends EventEmitter {
   #child;
@@ -32,7 +34,15 @@ export default class Debugger extends EventEmitter {
 
   async start() {
     await this.#httpServer.start();
-    this.#httpServer.on("data", (data) => this.emit("data", data));
+    this.#httpServer.on("data", (data) => {
+      if (isDev()) {
+        fs.writeFileSync(
+          "/home/alex/Desktop/VSC/debugger/debugger/lib/dev-log.json",
+          JSON.stringify(this.data),
+        );
+      }
+      this.emit("data", data);
+    });
     this.#httpServer.on("clear", () => this.emit("clear"));
     this.#httpServer.on("ready", () => this.emit("ready"));
 

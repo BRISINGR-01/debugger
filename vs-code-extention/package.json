@@ -49,6 +49,10 @@
       {
         "command": "traceViewer.clear",
         "title": "Trace Viewer: Clear Trace"
+      },
+      {
+        "command": "traceViewer.jumpToEndOfFn",
+        "title": "Trace Viewer: Jump to Function Return..."
       }
     ],
     "menus": {
@@ -79,6 +83,10 @@
         },
         {
           "command": "traceViewer.clear",
+          "when": "traceViewer.hasTrace"
+        },
+        {
+          "command": "traceViewer.jumpToEndOfFn",
           "when": "traceViewer.hasTrace"
         }
       ],

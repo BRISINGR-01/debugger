@@ -195,16 +195,38 @@ export default {
     // chained expressions like `a || b || c` get every level instrumented.
   }),
 
-  // ── If statements: if (<test>) ───────────────────────────────────────
-  // Wraps the whole test expression in an outer emit, on top of whatever
-  // LogicalExpression already did to its operands.
+  // ── If / else-if / else statements ──────────────────────────────────
+  // Emits:
+  //   • "if"        – when each test condition is evaluated (value = boolean result)
+  //   • "if_branch" – when a branch body is entered (branch = "then"|"else_if"|"else")
   IfStatement: safeInst((path) => {
+    // Wrap the test expression to emit the condition value
     const testPath = path.get("test");
     testPath.replaceWith(
       emitCall("if", [getLocProp(testPath.node), prop("value", testPath.node)]),
     );
-    // No path.skip(): lets the LogicalExpression visitor still process the
-    // original test expression now nested as the emit's value argument.
+
+    // Insert if_branch emit at the start of the consequent (then) body
+    insertBranchEmit(path.get("consequent"), "then", 0, path.node);
+
+    // Walk the else-if / else chain
+    let branchIndex = 1;
+    let altPath = path.get("alternate");
+    while (altPath && altPath.node) {
+      if (t.isIfStatement(altPath.node)) {
+        insertBranchEmit(
+          altPath.get("consequent"),
+          "else_if",
+          branchIndex,
+          altPath.node,
+        );
+        branchIndex++;
+        altPath = altPath.get("alternate");
+      } else {
+        insertBranchEmit(altPath, "else", branchIndex, altPath.node);
+        break;
+      }
+    }
   }),
   BinaryExpression: safeInst((path) => {
     path.replaceWith(
@@ -262,4 +284,18 @@ function stringifyMemberChain(node) {
 
   // fallback for anything else (new expressions, parenthesized, etc.)
   return node.type;
+}
+
+function insertBranchEmit(bodyPath, branch, index, locNode) {
+  const emit = emitCall("if_branch", [
+    prop("branch", strLiteral(branch)),
+    prop("branchIndex", t.numericLiteral(index)),
+    getLocProp(locNode),
+  ]);
+
+  if (t.isBlockStatement(bodyPath.node)) {
+    bodyPath.unshiftContainer("body", emit);
+  } else {
+    bodyPath.insertBefore(emit);
+  }
 }
