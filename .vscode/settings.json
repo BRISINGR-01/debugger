@@ -1,0 +1,4 @@
+{
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "cmake.sourceDirectory": "/home/alex/Desktop/VSC/debugger/cpp/src"
+}

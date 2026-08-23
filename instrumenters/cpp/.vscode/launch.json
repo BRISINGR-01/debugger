@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python Debugger: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "CMake Target Debug",
+      "type": "cppdbg", // Use "cpplldb" on macOS
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [], // Put any CLI arguments your program needs here
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/src",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb", // Use "lldb" on macOS
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}

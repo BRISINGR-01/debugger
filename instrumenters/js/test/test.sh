@@ -1,0 +1,1 @@
+DEV=1 node  ../../../debugger/cli.ts node main.js
