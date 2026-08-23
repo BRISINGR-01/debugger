@@ -105,30 +105,31 @@
       "args": ["-p", "js/test", "node", "test/main.js"]
     },
     {
-      "name": "Launch instrumenter",
-      "program": "/home/alex/Desktop/VSC/debugger/js/src/index.js",
+      "name": "Launch instrumenter (js)",
+      "program": "/home/alex/Desktop/VSC/debugger/instrumenters/js/src/index.ts",
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
       "args": [
         "instrument",
-        "/home/alex/Desktop/VSC/debugger/js/test",
-        "/home/alex/Desktop/VSC/debugger/js/test/${fileBasename}",
-        "/home/alex/Desktop/VSC/debugger/js/test/.debug/${fileBasename}",
-        "/home/alex/Desktop/VSC/debugger/js/test/.debug"
-        // "/home/alex/Desktop/VSC/latin-is-simple.com_1/frontend/3rdparty/bootstrap-color-mode-switcher.ts",
-        // "/home/alex/Desktop/VSC/latin-is-simple.com_1/.debug/frontend/3rdparty/bootstrap-color-mode-switcher.ts",
-        // "/home/alex/Desktop/VSC/latin-is-simple.com_1/.debug/"
+        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test",
+        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/${fileBasename}",
+        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug/${fileBasename}",
+        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug"
+        // "/home/alex/Desktop/VSC/debugger/instrumenters/js/test",
+        // "/home/alex/Desktop/VSC/debugger/instrumenters/js/test/${fileBasename}",
+        // "/home/alex/Desktop/VSC/debugger/instrumenters/js/test/.debug/${fileBasename}",
+        // "/home/alex/Desktop/VSC/debugger/instrumenters/js/test/.debug"
       ]
     },
     {
       "name": "Launch cli",
-      "program": "/home/alex/Desktop/VSC/debugger/debugger/cli.js",
-      "cwd": "/home/alex/Desktop/VSC/debugger/js/test",
+      "program": "/home/alex/Desktop/VSC/debugger/debugger/cli.ts",
+      "cwd": "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test",
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
-      "args": ["ls"]
+      "args": ["-s", "ls"]
     },
     {
       "name": "Python Debugger: Current File",

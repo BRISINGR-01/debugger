@@ -59,11 +59,11 @@ const CPPInstrumenter: Instrumenter = {
     debugDir: string,
   ) {
     execSync(
-      `clang++ -std=c++17 -o /dev/null \
+      `clang++ -std=c++17 -c -o /dev/null \
         -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
         -include ${path.resolve(cppInstrumenterPath, "recorder", "recorder.h")} \
-        -fplugin-arg-instrumenter-${pathInDbg}\
-        ${pathInSrc}  '${srcRoot}' '${pathInSrc}' '${pathInDbg}' '${debugDir}'`,
+        -fplugin-arg-instrumenter-${pathInDbg} \
+        ${pathInSrc}`,
     );
   },
 };
@@ -91,10 +91,12 @@ export function processEntry(srcRoot: string, file: string, debugDir: string) {
   const pathInSrc = path.join(srcRoot, file);
   const pathInDbg = path.join(debugDir, file);
 
-  if (!needsUpdate(pathInSrc, pathInDbg)) return;
-
   const inst = chooseInstrumenter(file);
   if (!inst) return makeSymlink(pathInSrc, pathInDbg);
+
+  if (fs.lstatSync(pathInDbg).isSymbolicLink()) fs.unlinkSync(pathInDbg);
+
+  if (!needsUpdate(pathInSrc, pathInDbg)) return;
 
   const targetPath = path.resolve(debugDir, file);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
@@ -110,7 +112,7 @@ export function processEntry(srcRoot: string, file: string, debugDir: string) {
 
 export function setupDebugDir(srcRoot: string, config: Config) {
   const debugDir = path.resolve(srcRoot, debugDirName);
-  fs.mkdirSync(debugDir, { recursive: false });
+  fs.mkdirSync(debugDir, { recursive: true });
 
   config.setup(debugDir);
 

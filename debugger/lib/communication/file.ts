@@ -16,7 +16,7 @@ export default class File extends EventEmitter implements Sink {
   }
 
   async start() {
-    if (!fs.existsSync(this.path)) fs.writeFileSync(this.path, "");
+    if (this.path && !fs.existsSync(this.path)) fs.writeFileSync(this.path, "");
     this.startWatcher();
     this.emit("ready");
   }

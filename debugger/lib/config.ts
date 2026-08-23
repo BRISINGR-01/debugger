@@ -59,12 +59,14 @@ export default class Config extends EventEmitter {
         .toJSON() as unknown as typeof this.data;
       if (loaded && typeof loaded === "object") {
         this.data = {
-          command: loaded.command,
-          ioFilePath: loaded.ioFilePath,
-          excludePattern: loaded.excludePattern ?? [],
-          shouldRestart: loaded.shouldRestart ?? true,
-          shouldWatch: loaded.shouldWatch ?? false,
-          httpPort: loaded.httpPort ?? 5634,
+          command: loaded.command ?? this.data.command,
+          ioFilePath: loaded.ioFilePath ?? this.data.ioFilePath,
+          excludePattern:
+            loaded.excludePattern ?? this.data.excludePattern ?? [],
+          shouldRestart:
+            loaded.shouldRestart ?? this.data.shouldRestart ?? true,
+          shouldWatch: loaded.shouldWatch ?? this.data.shouldWatch ?? false,
+          httpPort: loaded.httpPort ?? this.data.httpPort ?? 5634,
         };
       }
     } catch {}
