@@ -7,7 +7,7 @@
  * Compile and run:
  *   clang++ -fplugin=../src/build/Instrumenter.so \
                   -include ../src/recorder_runtime.h \
-                  -std=c++17 -c main.cpp
+                  -std=c++20 -c main.cpp
  *   ./main.o
  */
 #include <stdexcept>
@@ -74,8 +74,8 @@ int val2(int);
 // ── Main ──────────────────────────────────────────────────────────────────
 int main()
 {
-    return 0;
     printf("%i\n", val(9));
+    return 0;
     printf("%i\n", val2(9));
     int x = 10, u = 10;
     int y = 20;

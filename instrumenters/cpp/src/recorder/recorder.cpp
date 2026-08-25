@@ -1,8 +1,8 @@
 #include <string>
 
-#ifdef __DBG_IMPL
-
 void __dbg_emit(const std::string);
+
+#ifdef __DBG_IMPL
 
 static std::string __dbg_gen_id(std::string file);
 
@@ -31,11 +31,6 @@ inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string kind,
 {
     return ctxId + "|" + kind + "|" +
            std::to_string(startLine) + "|" + std::to_string(startCol) + "|" + std::to_string(endLine) + "|" + std::to_string(endCol);
-}
-
-static void __dbg_emit(const std::string data)
-{
-    printf("%s\n", data.c_str());
 }
 
 inline void __func_enter(const std::string ctx, const std::string func_name)

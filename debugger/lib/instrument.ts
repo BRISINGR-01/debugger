@@ -7,7 +7,7 @@ import {
   makeSymlink,
   debugDirName,
 } from "./utils.ts";
-import Config from "./config.ts";
+import type { Config } from "./config.ts";
 
 const jsInstrumenterPath = path.resolve(
   import.meta.dirname,
@@ -44,25 +44,47 @@ const CPPInstrumenter: Instrumenter = {
     const cxx = [],
       headers = [];
     for (const file of files) {
-      if (file.endsWith(".h") || file.endsWith(".hpp")) {
+      if (file.endsWith(".hpp")) {
         headers.push(file);
       } else {
         cxx.push(file);
       }
     }
 
-    console.error(`clang++ -std=c++17 -o /dev/null \
-        -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
-        -fplugin-arg-instrumenter-${debugDir} \
-        ${headers.map((h) => `-I${h}`).join(" ")} \
-        ${cxx.map((f) => `'${f}'`).join(" ")}`);
+    if (cxx.length === 0) return;
 
     execSync(
-      `clang++ -std=c++17 -o /dev/null \
+      `clang++ -std=c++20 ${cxx.length === 1 ? "-c" : ""} -o /dev/null \
         -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
         -fplugin-arg-instrumenter-${debugDir} \
         ${headers.map((h) => `-I${h}`).join(" ")} \
         ${cxx.map((f) => `'${f}'`).join(" ")}`,
+      { cwd: srcRoot },
+    );
+  },
+};
+
+const CInstrumenter: Instrumenter = {
+  prepare(srcRoot: string, debugDir: string) {},
+  instrument(srcRoot: string, debugDir: string, files: string[]) {
+    const c = [],
+      headers = [];
+    for (const file of files) {
+      if (file.endsWith(".h")) {
+        headers.push(file);
+      } else {
+        c.push(file);
+      }
+    }
+
+    if (c.length === 0) return;
+
+    execSync(
+      `clang ${c.length === 1 ? "-c" : ""} -o /dev/null \
+        -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
+        -fplugin-arg-instrumenter-${debugDir} \
+        ${headers.map((h) => `-I${h}`).join(" ")} \
+        ${c.map((f) => `'${f}'`).join(" ")}`,
       { cwd: srcRoot },
     );
   },
@@ -81,8 +103,9 @@ export function chooseInstrumenter(file: string) {
     case ".cts":
       return JSInstrumenter;
     case ".c":
-    case ".cpp":
     case ".h":
+      return CInstrumenter;
+    case ".cpp":
     case ".hpp":
       return CPPInstrumenter;
   }
@@ -119,9 +142,7 @@ export function setupDebugDir(srcRoot: string, config: Config) {
   const debugDir = path.resolve(srcRoot, debugDirName);
   fs.mkdirSync(debugDir, { recursive: true });
 
-  config.setup(debugDir);
-
-  const isExcluded = buildExcludeMatcher(srcRoot, config.data.excludePattern);
+  const isExcluded = buildExcludeMatcher(srcRoot, config.excludePattern);
   const files = enumerateProjectFiles(srcRoot, srcRoot, debugDir, isExcluded);
 
   const instMap = new Map<Instrumenter, string[]>();

@@ -51,11 +51,10 @@ std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const Source
     };
 }
 
-static std::mutex HeaderMutex;
-static std::set<std::string> instrumentedFiles;
-
-bool shouldInstrumentFile(const std::string &path)
+bool shouldSkipFn(const std::string &funcName)
 {
-    std::lock_guard<std::mutex> lock(HeaderMutex);
-    return instrumentedFiles.insert(path).second;
+    if (funcName.starts_with("__dbg"))
+        return true;
+
+    return false;
 }

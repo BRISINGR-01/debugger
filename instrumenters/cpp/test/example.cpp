@@ -4,13 +4,13 @@
 //
 //    clang++ -fplugin=./build/Instrumenter.so \
 //            -include recorder_runtime.h \
-//            -std=c++17 -c example.cpp -o example.o
+//            -std=c++20 -c example.cpp -o example.o
 //
 //  Or run the full demo:
 //
 //    clang++ -fplugin=./build/Instrumenter.so \
 //            -include recorder_runtime.h \
-//            -std=c++17 example.cpp -o example_demo
+//            -std=c++20 example.cpp -o example_demo
 //    ./example_demo
 // ============================================================================
 #include <stdexcept>

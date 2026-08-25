@@ -19,7 +19,7 @@ extern "C" int plugin_is_GPL_compatible;
 //  Usage:
 //      clang++ -fplugin=./build/Instrumenter.so \
 //              -include recorder_runtime.h \
-//              -std=c++17 -c example.cpp
+//              -std=c++20 -c example.cpp
 // ============================================================================
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"

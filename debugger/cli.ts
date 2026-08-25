@@ -22,6 +22,7 @@ program
   .option("-p, --path <directory>", "source directory to instrument")
   .option("-P, --port <number>", "server port", Number, 5634)
   .option("-n, --no-restart", "do not restart on file changes")
+  .option("-f, --file", "file to which to direct events")
   .option("-W, --no-watch", "no file watching")
   .allowExcessArguments(true)
   .parse(process.argv);
@@ -33,6 +34,7 @@ const sourceDir = opts.path ? path.resolve(opts.path) : process.cwd();
 
 const dbg = await createDebugger({
   command,
+  ioFilePath: opts.file,
   srcRoot: sourceDir,
   excludePattern: opts.exclude,
   shouldRestart: opts.restart,

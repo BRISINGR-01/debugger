@@ -19,7 +19,7 @@ extern "C" int plugin_is_GPL_compatible;
 //  Usage:
 //      clang++ -fplugin=./build/Instrumenter.so \
 //              -include recorder_runtime.h \
-//              -std=c++17 -c example.cpp
+//              -std=c++20 -c example.cpp
 // ============================================================================
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -79,10 +79,17 @@ public:
         if (!CS)
             return true;
 
-        std::string func = FD->getQualifiedNameAsString();
-
         // Insert after opening brace
         SourceLocation insertPt = CS->getLBracLoc().getLocWithOffset(1);
+
+        std::string func = FD->getQualifiedNameAsString();
+        if (shouldSkipFn(func))
+        {
+            RW.InsertTextAfter(insertPt, " ");
+            // in case of a single file with nothing else to instrument, signify the file has to be copied still
+            return true;
+        }
+
         RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func));
 
         // ── Wrap return statements ────────────────────────────────────────────
@@ -264,9 +271,6 @@ public:
             std::filesystem::path file = FE->tryGetRealPathName().str();
             std::filesystem::path out = outputDir;
             out /= file.filename();
-
-            if (!shouldInstrumentFile(file))
-                continue;
 
             std::error_code EC;
             llvm::raw_fd_ostream os(out.c_str(), EC, llvm::sys::fs::OF_Text);

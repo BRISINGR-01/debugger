@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import fs from "fs";
 import type Sink from "./sink.ts";
-import Config from "../config.ts";
+import { type Config } from "../config.ts";
 import type { LogEvent } from "../../../json-spec.ts";
 
 export default class File extends EventEmitter implements Sink {
@@ -22,7 +22,7 @@ export default class File extends EventEmitter implements Sink {
   }
 
   applyConfig(config: Config): void {
-    this.path = config.data.ioFilePath!;
+    this.path = config.ioFilePath!;
   }
 
   async stop(): Promise<void> {

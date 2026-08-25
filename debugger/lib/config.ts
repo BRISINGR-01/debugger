@@ -2,77 +2,55 @@ import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
 
-export default class Config extends EventEmitter {
-  data: {
-    httpPort: number;
-    ioFilePath?: string;
-    command?: string;
-    excludePattern: string[];
-    shouldRestart?: boolean;
-    shouldWatch?: boolean;
-  } = {
-    httpPort: 5634,
-    excludePattern: [],
-  };
-  file: string = "";
-  watcher?: fs.StatWatcher;
+export type Config = {
+  command: string | undefined;
+  ioFilePath: string | undefined;
+  excludePattern: string[];
+  shouldRestart: boolean;
+  shouldWatch: boolean;
+  httpPort: number;
+};
 
-  constructor(options: {
-    command?: string;
-    excludePattern: string[];
-    shouldRestart?: boolean;
-    shouldWatch?: boolean;
-    httpPort?: number;
-  }) {
-    super();
-    this.data = {
-      command: options.command,
-      ioFilePath: undefined,
-      excludePattern: options.excludePattern ?? [],
-      shouldRestart: options.shouldRestart ?? true,
-      shouldWatch: options.shouldWatch ?? false,
-      httpPort: options.httpPort ?? 5634,
+const defaultData: Config = {
+  command: undefined,
+  ioFilePath: undefined,
+  excludePattern: [],
+  shouldRestart: true,
+  shouldWatch: false,
+  httpPort: 5634,
+};
+
+export default function loadConfig(cliOptions: Config, debugDir: string) {
+  const file = path.join(debugDir, ".dbg-config.json");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+
+  let data: Config = {
+    ...defaultData,
+    ...cliOptions,
+  };
+
+  if (fs.existsSync(file)) {
+    const loaded = load(file);
+    data = {
+      ...cliOptions,
+      ...loaded,
     };
   }
 
-  setup(debugDir: string) {
-    this.file = path.join(debugDir, ".dbg-config.json");
-    this.data.ioFilePath = path.join(debugDir, ".dbg-socket");
+  data.ioFilePath = path.join(debugDir, ".dbg-socket");
+  save(file, data);
+  return data;
+}
 
-    if (fs.existsSync(this.file)) {
-      this.load();
-    } else {
-      this.save();
-    }
+function load(file: string) {
+  try {
+    const loaded = fs.readFileSync(file).toJSON() as unknown as Config;
+    return loaded && typeof loaded === "object" ? loaded : defaultData;
+  } catch {}
 
-    this.watcher = fs.watchFile(this.file, () => {
-      const oldData = structuredClone(this.data);
-      this.load();
-      this.emit("change", { curr: this.data, prev: oldData });
-    });
-  }
+  return defaultData;
+}
 
-  load() {
-    try {
-      const loaded = fs
-        .readFileSync(this.file)
-        .toJSON() as unknown as typeof this.data;
-      if (loaded && typeof loaded === "object") {
-        this.data = {
-          command: loaded.command ?? this.data.command,
-          ioFilePath: loaded.ioFilePath ?? this.data.ioFilePath,
-          excludePattern:
-            loaded.excludePattern ?? this.data.excludePattern ?? [],
-          shouldRestart:
-            loaded.shouldRestart ?? this.data.shouldRestart ?? true,
-          shouldWatch: loaded.shouldWatch ?? this.data.shouldWatch ?? false,
-          httpPort: loaded.httpPort ?? this.data.httpPort ?? 5634,
-        };
-      }
-    } catch {}
-  }
-
-  save() {
-    fs.writeFileSync(this.file, JSON.stringify(this.data));
-  }
+function save(file: string, data: Config) {
+  fs.writeFileSync(file, JSON.stringify(data));
 }
