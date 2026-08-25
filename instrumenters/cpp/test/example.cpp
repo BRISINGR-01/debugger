@@ -17,17 +17,14 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include "header.h"
 
 int c()
 {
     return 9;
 }
-int add(int a, int b)
-{
-    return a + b;
-}
 
-int main()
+int main2()
 {
     int c = 9;
     c++;

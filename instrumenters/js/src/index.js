@@ -8,7 +8,7 @@ switch (action) {
     prepareDest(...args);
     break;
   case "instrument":
-    instrumentFile(...args);
+    instrumentFile(args[0], args[1], JSON.parse(args[2]));
     break;
   default:
     console.error("You have to provide a viable action");

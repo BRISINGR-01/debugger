@@ -29,13 +29,15 @@ extern "C" int plugin_is_GPL_compatible;
 #include "clang/Lex/Lexer.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/FileManager.h"
-
 #include "llvm/Support/raw_ostream.h"
-#include <iostream>
+
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <iostream>
+#include <filesystem>
+#include <fstream>
 
 #include "./include/utils.hpp"
 #include "./include/construct_calls.hpp"
@@ -49,7 +51,7 @@ public:
     // ── Functions ─────────────────────────────────────────────────────────────
     bool VisitFunctionDecl(FunctionDecl *FD)
     {
-        if (!FD->hasBody()) // Only visit function definitions, skip declarations.
+        if (!FD->hasBody() || !FD->isThisDeclarationADefinition()) // Only visit function definitions, skip declarations.
             return true;
         if (FD->isImplicit()) // Skip if already instrumented in this pass or if it's a compiler builtin.
             return true;
@@ -142,7 +144,7 @@ private:
         if (!location.has_value())
             return;
 
-        RW.ReplaceText(RS->getSourceRange(), construct_func_return(*location, RS, SM, LO));
+        RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return(*location, RS, SM, LO));
     }
 
     // Ensure a statement body is wrapped in braces (for braceless if/loop bodies).
@@ -186,9 +188,26 @@ public:
 class InstrumenterConsumer : public ASTConsumer
 {
 public:
-    std::string outputFile;
+    std::string outputDir;
     explicit InstrumenterConsumer(CompilerInstance &CI)
-        : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts()) {}
+        : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts())
+    {
+        const std::filesystem::path currFile = __FILE__;
+        const std::filesystem::path impl_file = currFile.parent_path().parent_path() / "recorder" / "recorder.cpp";
+
+        std::ifstream file(impl_file.c_str());
+        if (!file.is_open())
+        {
+            std::cerr << "Error opening the file!" << std::endl;
+            exit(1);
+        }
+
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        recorderImpl = ss.str();
+
+        file.close();
+    }
 
     void HandleTranslationUnit(ASTContext &Ctx) override
     {
@@ -242,55 +261,58 @@ public:
             if (!FE)
                 continue;
 
+            std::filesystem::path file = FE->tryGetRealPathName().str();
+            std::filesystem::path out = outputDir;
+            out /= file.filename();
+
+            if (!shouldInstrumentFile(file))
+                continue;
+
             std::error_code EC;
-            llvm::raw_fd_ostream os(outputFile, EC, llvm::sys::fs::OF_Text);
+            llvm::raw_fd_ostream os(out.c_str(), EC, llvm::sys::fs::OF_Text);
             if (EC)
             {
-                llvm::errs() << "Cannot write " << outputFile << ": "
-                             << EC.message() << "\n";
+                llvm::errs() << "Cannot write \"" << out << "\": " << EC.message() << "\n";
                 continue;
             }
+            os << recorderImpl;
             I->second.write(os);
-            llvm::outs() << "[instrumenter] wrote: " << outputFile << "\n";
+
+            llvm::outs() << "[instrumenter] wrote: " << out << "\n";
         }
     }
 
 private:
     CompilerInstance &CI;
     Rewriter RW;
+    std::string recorderImpl;
 };
 
 class InstrumenterAction : public PluginASTAction
 {
 
 private:
-    std::string outputFile;
+    std::string outputDir;
 
 public:
     std::unique_ptr<ASTConsumer>
     CreateASTConsumer(CompilerInstance &CI, llvm::StringRef) override
     {
         auto IC = std::make_unique<InstrumenterConsumer>(CI);
-        IC->outputFile = outputFile;
+        IC->outputDir = outputDir;
         return IC;
     }
 
     bool ParseArgs(const CompilerInstance &,
                    const std::vector<std::string> &args) override
     {
-        for (const auto &a : args)
+        if (args.size() != 1)
         {
-            std::cout << a << std::endl;
-            if (a == "-help")
-            {
-                llvm::outs() << "Instrumenter plugin options:\n"
-                                "  (none yet)\n";
-            }
-            else
-            {
-                this->outputFile = a;
-            }
+            std::cerr << "The instrumentation plugin requires a single argument - path to debug destination" << std::endl;
+            exit(1);
         }
+
+        outputDir = args[0];
         return true;
     }
 

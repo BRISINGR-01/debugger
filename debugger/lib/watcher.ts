@@ -1,22 +1,22 @@
 import chokidar from "chokidar";
-import { relative, resolve, basename } from "path";
-import { rmSync, mkdirSync, lstatSync } from "fs";
-import { buildExcludeMatcher } from "./utils.ts";
-import { processEntry } from "./instrument.ts";
+import path, { relative, resolve, basename } from "path";
+import { rmSync, mkdirSync, lstatSync, existsSync } from "fs";
+import { buildExcludeMatcher, makeSymlink } from "./utils.ts";
+import { prepareFileAndGetInstr } from "./instrument.ts";
 
 export function watchChanges(
-  sourceDir: string,
+  srcRoot: string,
   debugDir: string,
   excludePatterns: string[],
   onChange: () => void,
 ) {
-  const isExcluded = buildExcludeMatcher(sourceDir, excludePatterns);
+  const isExcluded = buildExcludeMatcher(srcRoot, excludePatterns);
 
-  const watcher = chokidar.watch(sourceDir, {
+  const watcher = chokidar.watch(srcRoot, {
     ignored: (watchPath) => {
       if (watchPath.startsWith(debugDir)) return true;
       return (
-        isExcluded(relative(sourceDir, watchPath)) ||
+        isExcluded(relative(srcRoot, watchPath)) ||
         isExcluded(basename(watchPath))
       );
     },
@@ -24,8 +24,8 @@ export function watchChanges(
   });
 
   watcher.on("all", (event, filePath) => {
-    const rel = relative(sourceDir, filePath);
-    const target = resolve(debugDir, rel);
+    const file = relative(srcRoot, filePath);
+    const target = resolve(debugDir, file);
 
     if (event === "unlinkDir" || event === "unlink") {
       try {
@@ -44,7 +44,20 @@ export function watchChanges(
       !lstatSync(target).isSymbolicLink() &&
       (event === "add" || event === "change")
     ) {
-      processEntry(sourceDir, rel, debugDir);
+      const inst = prepareFileAndGetInstr(srcRoot, file, debugDir, isExcluded);
+      if (!inst) return;
+
+      const pathInDbg = path.join(debugDir, file);
+
+      try {
+        inst.instrument(srcRoot, debugDir, [file]);
+      } catch (error) {
+        console.error((error as { message: string }).message);
+        if (!existsSync(pathInDbg)) {
+          makeSymlink(path.join(srcRoot, file), pathInDbg);
+        }
+      }
+
       onChange();
     }
   });
@@ -52,7 +65,7 @@ export function watchChanges(
   watcher.on("error", (err) =>
     console.error(`[debugger] watch error: ${(err as Error).message}`),
   );
-  watcher.on("ready", () => console.log(`[debugger] watching: ${sourceDir}`));
+  watcher.on("ready", () => console.log(`[debugger] watching: ${srcRoot}`));
 
   return watcher;
 }

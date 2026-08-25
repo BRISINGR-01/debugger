@@ -16,27 +16,19 @@ const jsInstrumenterPath = path.resolve(
 
 type Instrumenter = {
   prepare(srcRoot: string, debugDir: string): void;
-  instrument(
-    srcRoot: string,
-    pathInSrc: string,
-    targetPath: string,
-    debugDir: string,
-  ): void;
+  instrument(srcRoot: string, debugDir: string, files: string[]): void;
 };
 const JSInstrumenter: Instrumenter = {
   prepare(srcRoot: string, debugDir: string) {
     execSync(
       `node ${path.join(jsInstrumenterPath, "index.js")} prepare-dest '${srcRoot}' '${debugDir}'`,
+      { cwd: srcRoot },
     );
   },
-  instrument(
-    srcRoot: string,
-    pathInSrc: string,
-    targetPath: string,
-    debugDir: string,
-  ) {
+  instrument(srcRoot: string, debugDir: string, files: string[]) {
     execSync(
-      `node ${path.join(jsInstrumenterPath, "index.js")} instrument '${srcRoot}' '${pathInSrc}' '${targetPath}' '${debugDir}'`,
+      `node ${path.join(jsInstrumenterPath, "index.js")} instrument '${srcRoot}' '${debugDir}' '${JSON.stringify(files)}'`,
+      { cwd: srcRoot },
     );
   },
 };
@@ -47,23 +39,31 @@ const cppInstrumenterPath = path.resolve(
 );
 
 const CPPInstrumenter: Instrumenter = {
-  prepare(srcRoot: string, debugDir: string) {
-    execSync(
-      `node ${jsInstrumenterPath} prepare-dest '${srcRoot}' '${debugDir}'`,
-    );
-  },
-  instrument(
-    srcRoot: string,
-    pathInSrc: string,
-    pathInDbg: string,
-    debugDir: string,
-  ) {
-    execSync(
-      `clang++ -std=c++17 -c -o /dev/null \
+  prepare(srcRoot: string, debugDir: string) {},
+  instrument(srcRoot: string, debugDir: string, files: string[]) {
+    const cxx = [],
+      headers = [];
+    for (const file of files) {
+      if (file.endsWith(".h") || file.endsWith(".hpp")) {
+        headers.push(file);
+      } else {
+        cxx.push(file);
+      }
+    }
+
+    console.error(`clang++ -std=c++17 -o /dev/null \
         -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
-        -include ${path.resolve(cppInstrumenterPath, "recorder", "recorder.h")} \
-        -fplugin-arg-instrumenter-${pathInDbg} \
-        ${pathInSrc}`,
+        -fplugin-arg-instrumenter-${debugDir} \
+        ${headers.map((h) => `-I${h}`).join(" ")} \
+        ${cxx.map((f) => `'${f}'`).join(" ")}`);
+
+    execSync(
+      `clang++ -std=c++17 -o /dev/null \
+        -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
+        -fplugin-arg-instrumenter-${debugDir} \
+        ${headers.map((h) => `-I${h}`).join(" ")} \
+        ${cxx.map((f) => `'${f}'`).join(" ")}`,
+      { cwd: srcRoot },
     );
   },
 };
@@ -82,32 +82,37 @@ export function chooseInstrumenter(file: string) {
       return JSInstrumenter;
     case ".c":
     case ".cpp":
+    case ".h":
+    case ".hpp":
       return CPPInstrumenter;
   }
   return null;
 }
 
-export function processEntry(srcRoot: string, file: string, debugDir: string) {
+export function prepareFileAndGetInstr(
+  srcRoot: string,
+  file: string,
+  debugDir: string,
+  isExcluded: (_: string) => boolean,
+) {
   const pathInSrc = path.join(srcRoot, file);
   const pathInDbg = path.join(debugDir, file);
 
-  const inst = chooseInstrumenter(file);
-  if (!inst) return makeSymlink(pathInSrc, pathInDbg);
+  if (!needsUpdate(pathInSrc, pathInDbg)) return null;
 
-  if (fs.lstatSync(pathInDbg).isSymbolicLink()) fs.unlinkSync(pathInDbg);
-
-  if (!needsUpdate(pathInSrc, pathInDbg)) return;
-
-  const targetPath = path.resolve(debugDir, file);
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-
-  try {
-    inst.instrument(srcRoot, pathInSrc, targetPath, debugDir);
-  } catch (error) {
-    console.error(error);
-    console.info(`[debugger] skipped "${file}"`);
-    makeSymlink(pathInSrc, pathInDbg);
+  const inst = chooseInstrumenter(file)!;
+  if (!inst || isExcluded(file)) {
+    makeSymlink(pathInSrc, path.resolve(debugDir, file));
+    return null;
   }
+
+  if (fs.existsSync(pathInDbg) && fs.lstatSync(pathInDbg).isSymbolicLink()) {
+    fs.unlinkSync(pathInDbg);
+  } else {
+    fs.mkdirSync(path.dirname(pathInDbg), { recursive: true });
+  }
+
+  return inst;
 }
 
 export function setupDebugDir(srcRoot: string, config: Config) {
@@ -119,22 +124,21 @@ export function setupDebugDir(srcRoot: string, config: Config) {
   const isExcluded = buildExcludeMatcher(srcRoot, config.data.excludePattern);
   const files = enumerateProjectFiles(srcRoot, srcRoot, debugDir, isExcluded);
 
-  const instrumenters = new Set<Instrumenter>();
+  const instMap = new Map<Instrumenter, string[]>();
   for (const file of files) {
-    const pathInSrc = path.resolve(srcRoot, file);
+    const inst = prepareFileAndGetInstr(srcRoot, file, debugDir, isExcluded);
+    if (!inst) continue;
 
-    if (isExcluded(file)) {
-      makeSymlink(pathInSrc, path.resolve(debugDir, file));
-      continue;
+    if (instMap.has(inst)) {
+      instMap.get(inst)!.push(file);
+    } else {
+      instMap.set(inst, [file]);
     }
-
-    const inst = chooseInstrumenter(file);
-    if (inst) instrumenters.add(inst);
-    processEntry(srcRoot, file, debugDir);
   }
 
-  for (const inst of instrumenters) {
+  for (const inst of instMap.keys()) {
     inst.prepare(srcRoot, debugDir);
+    inst.instrument(srcRoot, debugDir, instMap.get(inst)!);
   }
 
   return debugDir;

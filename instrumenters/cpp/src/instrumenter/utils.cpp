@@ -1,3 +1,5 @@
+#include <mutex>
+#include <string>
 #include "./include/utils.hpp"
 
 std::string escape(std::string s)
@@ -47,4 +49,13 @@ std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const Source
         .start = {.line = p_start.getLine(), .col = p_start.getColumn()},
         .end = {.line = p_end.getLine(), .col = p_end.getColumn()},
     };
+}
+
+static std::mutex HeaderMutex;
+static std::set<std::string> instrumentedFiles;
+
+bool shouldInstrumentFile(const std::string &path)
+{
+    std::lock_guard<std::mutex> lock(HeaderMutex);
+    return instrumentedFiles.insert(path).second;
 }

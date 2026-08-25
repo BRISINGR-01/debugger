@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
-set(RecHeader "recorder/recorder.h")
 file(GLOB INST_LIB CONFIGURE_DEPENDS "instrumenter/*")
 
 
@@ -72,7 +71,6 @@ endif()
 # ── Demo: compile example.cpp without the plugin (produces example_plain) ─────
 add_custom_target(demo_plain
     COMMAND ${CMAKE_CXX_COMPILER}
-            -include ${CMAKE_SOURCE_DIR}/${RecHeader}
             -std=c++17
             ${CMAKE_SOURCE_DIR}/example.cpp
             -o ${CMAKE_BINARY_DIR}/example_plain
@@ -83,7 +81,6 @@ add_custom_target(demo_plain
 add_custom_target(demo_instrumented
     COMMAND ${CMAKE_CXX_COMPILER}
             -fplugin=$<TARGET_FILE:Instrumenter>
-            -include ${CMAKE_SOURCE_DIR}/${RecHeader}
             -std=c++17
             ${CMAKE_SOURCE_DIR}/example.cpp
             -o ${CMAKE_BINARY_DIR}/example_instrumented
@@ -102,7 +99,6 @@ add_custom_target(run_demo
 add_custom_target(emit_rewritten
     COMMAND ${CMAKE_CXX_COMPILER}
             -fplugin=$<TARGET_FILE:Instrumenter>
-            -include ${CMAKE_SOURCE_DIR}/${RecHeader}
             -std=c++17
             -fsyntax-only
             ${CMAKE_SOURCE_DIR}/example.cpp

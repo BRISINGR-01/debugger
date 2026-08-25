@@ -1,79 +1,63 @@
-#include "recorder.h"
+#include <string>
 
-void __dbg_emit(const Event &ev)
+#ifdef __DBG_IMPL
+
+void __dbg_emit(const std::string);
+
+static std::string __dbg_gen_id(std::string file);
+
+inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string kind,
+                                       int16_t startLine, int16_t startCol, int16_t endLine, int16_t endCol);
+
+inline void __func_enter(const std::string ctx, const std::string func_name);
+inline void __func_exit(const std::string ctx);
+inline void __func_return(const std::string ctx, std::string returnVal);
+inline void __var_decl(const std::string ctx, std::string name, std::string type, std::string val);
+inline void __var_change(const std::string ctx, std::string name, std::string type, std::string val, std::string oldVal);
+
+#endif
+
+#ifndef __DBG_IMPL
+#define __DBG_IMPL
+
+static std::string __dbg_gen_id(std::string file)
 {
-    printf("{ id: %d, kind: %d", ev.ctxId, ev.kind);
+    static int uid = 0;
+    return file + "@" + std::to_string(uid++);
 }
 
-int __func_enter(const std::string &file, u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol, const char *func)
+inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string kind,
+                                       int16_t startLine, int16_t startCol, int16_t endLine, int16_t endCol)
 {
-    static int id = 0;
-
-    __dbg_emit(FnEnter{
-        {
-            .kind = EventKind::FuncEnter,
-            .ctxId = id,
-            .loc = {
-                .start = {.line = startLine, .col = startCol},
-                .end = {.line = endLine, .col = endCol},
-            },
-        },
-        .name = func,
-    });
-
-    return id++;
+    return ctxId + "|" + kind + "|" +
+           std::to_string(startLine) + "|" + std::to_string(startCol) + "|" + std::to_string(endLine) + "|" + std::to_string(endCol);
 }
 
-void __func_exit(int ctxId, u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol, std::optional<std::string> returnVal)
+static void __dbg_emit(const std::string data)
 {
-    __dbg_emit(FnExit{
-        {
-            .kind = EventKind::FuncExit,
-            .ctxId = ctxId,
-            .loc = {
-                .start = {.line = startLine, .col = startCol},
-                .end = {.line = endLine, .col = endCol},
-            },
-        },
-        .returnVal = returnVal,
-    });
+    printf("%s\n", data.c_str());
 }
 
-void __var_decl(int ctxId, u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol, std::string name, std::string type, std::string val)
+inline void __func_enter(const std::string ctx, const std::string func_name)
 {
-    __dbg_emit(VarDeclare{
-        {
-            .kind = EventKind::VarDecl,
-            .ctxId = ctxId,
-            .loc = {
-                .start = {.line = startLine, .col = startCol},
-                .end = {.line = endLine, .col = endCol},
-            },
-        },
-        .var = {
-            .name = name,
-            .type = type,
-            .val = val,
-        },
-    });
+    __dbg_emit(ctx + "|" + func_name);
 }
 
-void __var_change(int ctxId, u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol, std::string name, std::string type, std::string val, std::string oldVal)
+inline void __func_exit(const std::string ctx)
 {
-    __dbg_emit(VarChange{
-        {
-            .kind = EventKind::VarChange,
-            .ctxId = ctxId,
-            .loc = {
-                .start = {.line = startLine, .col = startCol},
-                .end = {.line = endLine, .col = endCol},
-            },
-        },
-        .var = {
-            .name = name,
-            .type = type,
-            .val = val,
-        },
-        .oldValue = oldVal,
-    });
+    __dbg_emit(ctx);
 }
+inline void __func_return(const std::string ctx, std::string returnVal)
+{
+    __dbg_emit(ctx + "|" + returnVal);
+}
+inline void __var_decl(const std::string ctx, std::string name, std::string type, std::string val)
+{
+    __dbg_emit(ctx + "|" + name + "|" + type + "|" + val);
+}
+inline void __var_change(const std::string ctx, std::string name, std::string type, std::string val, std::string oldVal)
+{
+    __dbg_emit(ctx + "|" + name + "|" + type + "|" + val + "|" + oldVal);
+}
+
+#endif // __DBG_IMPL

@@ -1,4 +1,4 @@
-int add(int, int);
+#include "header.h"
 
 int val(int a)
 {

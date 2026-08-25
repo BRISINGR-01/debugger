@@ -42,8 +42,6 @@
         "-fcoverage-compilation-dir=/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test",
         "-resource-dir",
         "/usr/lib/clang/22",
-        "-include",
-        "../src/recorder/recorder.h",
         "-internal-isystem",
         "/usr/bin/../lib64/gcc/x86_64-pc-linux-gnu/16/../../../../include/c++/16",
         "-internal-isystem",
@@ -72,29 +70,23 @@
         "-fexceptions",
         "-load",
         "../src/build/Instrumenter.so",
-        "-plugin-arg-out",
-        "plugin=ex.inst",
+        "-plugin-arg-instrumenter",
+        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug",
         "-faddrsig",
         "-fdwarf2-cfi-asm",
         "-o",
-        "/tmp/example-852e4b.o",
+        "/tmp/example-4bd6da.o",
         "-x",
         "c++",
+        "main.cpp",
         "example.cpp"
       ],
+      // clang++ -fplugin=../src/build/Instrumenter.so -std=c++17 example.cpp -fplugin-arg-instrumenter-/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug -o /dev/null -### 2>&1 | grep -- '"-cc1"' | python3 -c 'import sys,shlex,json; print(json.dumps(shlex.split(sys.stdin.read())[1:]))' | c
       "cwd": "${workspaceFolder}/instrumenters/cpp/test",
       "stopAtEntry": false,
       "externalConsole": false,
       "MIMode": "gdb",
       "setupCommands": [{ "text": "set breakpoint pending on" }]
-    },
-
-    {
-      "name": "Launch Program",
-      "program": "${file}",
-      "request": "launch",
-      "skipFiles": ["<node_internals>/**"],
-      "type": "node"
     },
     {
       "name": "Launch index.js",
@@ -129,7 +121,7 @@
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
-      "args": ["-s", "ls"]
+      "args": ["./cmake.sh && ./build/app"]
     },
     {
       "name": "Python Debugger: Current File",

@@ -36,7 +36,7 @@ const dbg = await createDebugger({
   srcRoot: sourceDir,
   excludePattern: opts.exclude,
   shouldRestart: opts.restart,
-  shouldWatch: !opts.watch,
+  shouldWatch: opts.watch,
   httpPort: opts.port,
 });
 

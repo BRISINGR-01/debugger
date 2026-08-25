@@ -1,11 +1,11 @@
 #include "include/construct_calls.hpp"
 
-void addLoc(
-    std::ostringstream &os, Loc &loc)
+void addCtx(
+    std::ostringstream &os, const std::string &kind, Loc &loc)
 {
-    os
-        << loc.start.line << ", " << loc.start.col << ", "
-        << loc.end.line << ", " << loc.end.col;
+    os << "__dbg_fmt_ctx(__dbg_ctx_id, \"" << kind << "\", "
+       << loc.start.line << ", " << loc.start.col << ", "
+       << loc.end.line << ", " << loc.end.col << ")";
 }
 
 // int __func_enter(const std::string &file,
@@ -15,8 +15,8 @@ const std::string construct_func_enter(const std::string &file, Loc &loc, const 
 {
     std::ostringstream os;
 
-    os << "int __dbg_ctx_id = __func_enter(\"" << escape(file) << "\", ";
-    addLoc(os, loc);
+    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");__func_enter(";
+    addCtx(os, "enter", loc);
     os << ", \"" << escape(func) << '"' << R_END;
     return os.str();
 }
@@ -77,9 +77,9 @@ const std::string construct_func_return(Loc &loc, ReturnStmt *RS, clang::SourceM
     std::string tname = typeStr(retVal->getType());
     std::ostringstream os;
 
-    os << "__func_return(__dbg_ctx_id, ";
-    addLoc(os, loc);
-    os << ", " << rtext << R_END;
+    os << "__func_return(";
+    addCtx(os, "return", loc);
+    os << ", " << '"' << rtext << '"' << R_END;
     return os.str();
 }
 
@@ -88,8 +88,8 @@ const std::string construct_func_return(Loc &loc, ReturnStmt *RS, clang::SourceM
 const std::string construct_func_exit(Loc &loc)
 {
     std::ostringstream os;
-    os << "__func_exit(__dbg_ctx_id, ";
-    addLoc(os, loc);
+    os << "__func_exit(";
+    addCtx(os, "exit", loc);
     os << R_END;
 
     return os.str();

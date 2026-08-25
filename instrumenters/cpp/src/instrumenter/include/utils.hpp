@@ -45,3 +45,4 @@ std::string typeStr(QualType qt);
 std::string exprText(const Expr *e, const SourceManager &SM,
                      const LangOptions &LO);
 std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const SourceManager &SM);
+bool shouldInstrumentFile(const std::string &path);

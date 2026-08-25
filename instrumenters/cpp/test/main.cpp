@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <iostream>
+#include "header.h"
 
 // ── Plain function ────────────────────────────────────────────────────────
 int add(int a, int b)
@@ -21,7 +22,7 @@ int add(int a, int b)
     i++;
     int result = a + b;
     if (a == 10)
-        add(1, 1);
+        return add(1, 1);
 
     return result;
 }
@@ -73,6 +74,7 @@ int val2(int);
 // ── Main ──────────────────────────────────────────────────────────────────
 int main()
 {
+    return 0;
     printf("%i\n", val(9));
     printf("%i\n", val2(9));
     int x = 10, u = 10;

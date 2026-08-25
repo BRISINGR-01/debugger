@@ -13,65 +13,65 @@ function findPackageType(dir) {
   return "module";
 }
 
-export default function instrumentFile(srcRoot, input, dest, destRoot) {
-  const source = fs.readFileSync(input, "utf8");
+export default function instrumentFiles(srcRoot, debugDir, files) {
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(srcRoot, file), "utf8");
 
-  const result = transformSync(source, {
-    filename: input,
-    cwd: srcRoot,
-    // Let Babel determine whether this is ESM or CommonJS.
-    sourceType: "unambiguous",
+    const result = transformSync(source, {
+      filename: file,
+      cwd: srcRoot,
+      // Let Babel determine whether this is ESM or CommonJS.
+      sourceType: "unambiguous",
 
-    plugins: [
-      [
-        new URL("./plugin/babel-plugin.js", import.meta.url).pathname,
-        {
-          moduleType: findPackageType(destRoot),
-          runtime: "__debug_recorder",
-        },
-      ],
-    ],
-
-    parserOpts: {
-      sourceType: "auto",
-
-      // Parse as much modern syntax as possible without relying on file extensions.
       plugins: [
-        "jsx",
-        "typescript",
-        "importMeta",
-        "dynamicImport",
-        "topLevelAwait",
-        "classProperties",
-        "classPrivateProperties",
-        "classPrivateMethods",
-        "optionalChaining",
-        "nullishCoalescingOperator",
-        "logicalAssignment",
-        "numericSeparator",
-        "objectRestSpread",
+        [
+          new URL("./plugin/babel-plugin.js", import.meta.url).pathname,
+          {
+            moduleType: findPackageType(debugDir),
+            runtime: "__debug_recorder",
+          },
+        ],
       ],
 
-      errorRecovery: true,
-      allowReturnOutsideFunction: true,
-      allowAwaitOutsideFunction: true,
-    },
+      parserOpts: {
+        sourceType: "auto",
 
-    babelrc: false,
-    configFile: false,
-    comments: true,
-    compact: false,
-    retainLines: false,
-    sourceMaps: true,
-  });
+        // Parse as much modern syntax as possible without relying on file extensions.
+        plugins: [
+          "jsx",
+          "typescript",
+          "importMeta",
+          "dynamicImport",
+          "topLevelAwait",
+          "classProperties",
+          "classPrivateProperties",
+          "classPrivateMethods",
+          "optionalChaining",
+          "nullishCoalescingOperator",
+          "logicalAssignment",
+          "numericSeparator",
+          "objectRestSpread",
+        ],
 
-  if (!result?.code) {
-    throw new Error(`Couldn't instrument "${input}"`);
+        errorRecovery: true,
+        allowReturnOutsideFunction: true,
+        allowAwaitOutsideFunction: true,
+      },
+
+      babelrc: false,
+      configFile: false,
+      comments: true,
+      compact: false,
+      retainLines: false,
+      sourceMaps: true,
+    });
+
+    if (!result?.code) {
+      throw new Error(`Couldn't instrument "${file}"`);
+    }
+
+    const pathInDbg = path.join(debugDir, file);
+    fs.mkdirSync(path.dirname(pathInDbg), { recursive: true });
+    fs.writeFileSync(pathInDbg, result.code, "utf8");
   }
-
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  try {
-    if (fs.lstatSync(dest).isSymbolicLink()) fs.unlinkSync(dest);
-  } catch {}
-  fs.writeFileSync(dest, result.code, "utf8");
 }
