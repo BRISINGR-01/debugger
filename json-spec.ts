@@ -1,10 +1,17 @@
-export type Id = string;
+export type Id = string; // <file>@<int>
 export type Loc = {
-  start: string;
-  end: string;
+  start: {
+    line: number;
+    col: number;
+  };
+  end: {
+    line: number;
+    col: number;
+  };
 };
+
 export type Event = {
-  fn_id: Id; // for declaration/change it is the function in which it happens or "global_space" is not in a function
+  ctx_id: Id;
   time: number;
   loc: Loc;
 };
@@ -23,24 +30,24 @@ export type CallEvent = Event & {
 
 export type EnterEvent = Event & {
   event: "enter";
-  function_name: string;
+  fn_name: string; // for declaration/change it is the function in which it happens or "global_space" is not in a function
   args: ({ loc: Loc } & Var)[];
 };
 
 export type ExitEvent = Event & {
   event: "exit";
-  returnVal: string | null;
+  return_val: string | null;
 };
 
 export type DeclareEvent = Event & {
   event: "declare";
-  variable: Var;
+  var: Var;
 };
 
 export type ChangeEvent = Event & {
   event: "change";
-  variable: Var;
-  oldValue: string;
+  var: Var;
+  old_val: string;
 };
 
 export type ErrorEvent = Event & {

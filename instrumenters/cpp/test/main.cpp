@@ -80,8 +80,8 @@ const std::string str(int n)
 int main()
 {
     printf("%s\n", str(9).c_str());
-    return 0;
     printf("%i\n", val(9));
+    return 0;
     printf("%i\n", val2(9));
     int x = 10, u = 10;
     int y = 20;

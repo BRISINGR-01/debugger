@@ -20,9 +20,6 @@
 
 #include "./utils.hpp"
 
-#define R_ARGS(fname, file, line) escape(fname) << "\", \"" << file << "\", " << line
-#define R_END ");\n"
-
 using namespace clang;
 
 struct Loc

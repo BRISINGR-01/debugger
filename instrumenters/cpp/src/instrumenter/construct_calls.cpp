@@ -13,22 +13,17 @@ void addCtx(
        << loc.end.line << "," << loc.end.col << ")";
 }
 
-const std::string construct_args(clang::FunctionDecl *FD)
+int construct_args(
+    std::ostringstream &os, clang::FunctionDecl *FD)
 {
-    std::ostringstream os;
-
-    bool hasParams = false;
+    int args_count = 0;
     for (const ParmVarDecl *P : FD->parameters())
     {
         if (!P->getName().empty())
-        {
-            hasParams = true;
-            break;
-        }
+            args_count++;
     }
 
-    if (!hasParams)
-        return "\"\"";
+    os << "struct __dbg_Fn_arg __dbg_args[" + std::to_string(args_count) + "] = {";
 
     for (const ParmVarDecl *P : FD->parameters())
     {
@@ -36,10 +31,12 @@ const std::string construct_args(clang::FunctionDecl *FD)
             continue;
         std::string name = P->getNameAsString();
         std::string type = typeStr(P->getType());
-        os << "\"{name:" << escape(name) << ",type:" << escape(type) << ",val:\\\"\" +" << var_to_str(name) << "+\"\\\"}\"";
+        os << "{\"" << escape(name) << "\",\"" << escape(type) << "\"," << var_to_str(name) << "},";
     }
 
-    return os.str();
+    os << "};\n";
+
+    return args_count;
 }
 
 // int __func_enter(const std::string &file,
@@ -48,17 +45,14 @@ const std::string construct_args(clang::FunctionDecl *FD)
 const std::string construct_func_enter(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD)
 {
     std::ostringstream os;
-
-    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");__func_enter(";
+    int args_count = construct_args(os, FD);
+    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");\n"
+       << "__func_enter(";
     addCtx(os, "enter", loc);
-    os << ", \"" << escape(func) << "\","
-       << construct_args(FD) << R_END;
+    os << ", \"" << escape(func) << "\", __dbg_args, " << std::to_string(args_count) << ");\n";
     return os.str();
 }
 
-// void __func_return(int ctxId,
-//                    u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol,
-//                    std::string returnVal);
 const std::string construct_func_return(Loc &loc, ReturnStmt *RS, clang::SourceManager &SM, const clang::LangOptions &LO)
 {
     Expr *retVal = RS->getRetValue();
@@ -72,8 +66,8 @@ const std::string construct_func_return(Loc &loc, ReturnStmt *RS, clang::SourceM
     std::ostringstream os;
 
     os << "__func_return(";
-    addCtx(os, "return", loc);
-    os << ",\"{type:" << escape(tname) << ",val:\\\"\"+" << var_to_str(rtext) << "+\"\\\"}\"" << R_END;
+    addCtx(os, "exit", loc);
+    os << ",\"" << escape(tname) << "\"," << var_to_str(rtext) << ");\n";
     return os.str();
 }
 
@@ -84,7 +78,7 @@ const std::string construct_func_exit(Loc &loc)
     std::ostringstream os;
     os << "__func_exit(";
     addCtx(os, "exit", loc);
-    os << R_END;
+    os << ");\n";
 
     return os.str();
 }
