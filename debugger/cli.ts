@@ -19,6 +19,7 @@ program
     },
     [],
   )
+  .option("-d, --disable", "Disable instruemtnation")
   .option("-p, --path <directory>", "source directory to instrument")
   .option("-P, --port <number>", "server port", Number, 5634)
   .option("-n, --no-restart", "do not restart on file changes")
@@ -34,6 +35,7 @@ const sourceDir = opts.path ? path.resolve(opts.path) : process.cwd();
 
 const dbg = await createDebugger({
   command,
+  disable: opts.disable,
   ioFilePath: opts.file,
   srcRoot: sourceDir,
   excludePattern: opts.exclude,

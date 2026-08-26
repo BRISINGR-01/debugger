@@ -1,5 +1,5 @@
 import type { LogEvent } from "../../../json-spec.ts";
-import Config from "../config.ts";
+import { type Config } from "../config.ts";
 
 export default interface Sink {
   on(
@@ -10,9 +10,7 @@ export default interface Sink {
       | ((code: number | null) => void),
   ): void;
 
-  applyConfig(config: Config): void;
-
   start(): Promise<void>;
   stop(): Promise<void>;
-  clear(): void;
+  clear(): Promise<void>;
 }

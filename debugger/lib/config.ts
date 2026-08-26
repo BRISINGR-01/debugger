@@ -7,6 +7,7 @@ export type Config = {
   ioFilePath: string | undefined;
   excludePattern: string[];
   shouldRestart: boolean;
+  disable: boolean;
   shouldWatch: boolean;
   httpPort: number;
 };
@@ -16,7 +17,8 @@ const defaultData: Config = {
   ioFilePath: undefined,
   excludePattern: [],
   shouldRestart: true,
-  shouldWatch: false,
+  disable: false,
+  shouldWatch: true,
   httpPort: 5634,
 };
 

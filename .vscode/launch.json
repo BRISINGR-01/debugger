@@ -21,7 +21,7 @@
         "-disable-llvm-verifier",
         "-discard-value-names",
         "-main-file-name",
-        "example.cpp",
+        "main.cpp",
         "-mrelocation-model",
         "pic",
         "-pic-level",
@@ -79,10 +79,10 @@
         "-x",
         "c++",
         "main.cpp",
-        "example.cpp",
+        "printVals.cpp",
         "dbg-emit.cpp"
       ],
-      // clang++ -fplugin=../src/build/Instrumenter.so -std=c++20 example.cpp -fplugin-arg-instrumenter-/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug -o /dev/null -### 2>&1 | grep -- '"-cc1"' | python3 -c 'import sys,shlex,json; print(json.dumps(shlex.split(sys.stdin.read())[1:]))' | c
+      // clang++ -fplugin=../src/build/Instrumenter.so -std=c++20 printVals.cpp -fplugin-arg-instrumenter-/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug -o /dev/null -### 2>&1 | grep -- '"-cc1"' | python3 -c 'import sys,shlex,json; print(json.dumps(shlex.split(sys.stdin.read())[1:]))' | c
       "cwd": "${workspaceFolder}/instrumenters/cpp/test",
       "stopAtEntry": false,
       "externalConsole": false,

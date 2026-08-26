@@ -3,18 +3,20 @@ import path, { relative, resolve, basename } from "path";
 import { rmSync, mkdirSync, lstatSync, existsSync } from "fs";
 import { buildExcludeMatcher, makeSymlink } from "./utils.ts";
 import { prepareFileAndGetInstr } from "./instrument.ts";
+import { type Config } from "./config.ts";
 
 export function watchChanges(
   srcRoot: string,
   debugDir: string,
-  excludePatterns: string[],
+  config: Config,
   onChange: () => void,
 ) {
-  const isExcluded = buildExcludeMatcher(srcRoot, excludePatterns);
+  const isExcluded = buildExcludeMatcher(srcRoot, config.excludePattern);
 
   const watcher = chokidar.watch(srcRoot, {
     ignored: (watchPath) => {
-      if (watchPath.startsWith(debugDir)) return true;
+      if (!config.disable && watchPath.startsWith(debugDir)) return true;
+
       return (
         isExcluded(relative(srcRoot, watchPath)) ||
         isExcluded(basename(watchPath))
@@ -31,7 +33,7 @@ export function watchChanges(
       try {
         rmSync(target, { recursive: true, force: true });
       } catch {}
-      onChange();
+      if (config.shouldRestart) onChange();
       return;
     }
 
@@ -44,6 +46,11 @@ export function watchChanges(
       !lstatSync(target).isSymbolicLink() &&
       (event === "add" || event === "change")
     ) {
+      if (config.disable) {
+        if (config.shouldRestart) onChange();
+        return;
+      }
+
       const inst = prepareFileAndGetInstr(srcRoot, file, debugDir, isExcluded);
       if (!inst) return;
 
@@ -58,7 +65,7 @@ export function watchChanges(
         }
       }
 
-      onChange();
+      if (config.shouldRestart) onChange();
     }
   });
 

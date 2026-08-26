@@ -19,6 +19,7 @@ inline void __var_change(const std::string ctx, std::string name, std::string ty
 
 #ifndef __DBG_IMPL
 #define __DBG_IMPL
+#include <time.h>
 
 static std::string __dbg_gen_id(std::string file)
 {
@@ -29,13 +30,22 @@ static std::string __dbg_gen_id(std::string file)
 inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string kind,
                                        int16_t startLine, int16_t startCol, int16_t endLine, int16_t endCol)
 {
-    return ctxId + "|" + kind + "|" +
+
+    time_t rawtime;
+    struct tm *timeinfo;
+
+    time(&rawtime);
+    std::string time = ctime(&rawtime);
+    int s = time.size();
+    time.erase(s - 1, s);
+
+    return ctxId + "|" + time + "|" + kind + "|" +
            std::to_string(startLine) + "|" + std::to_string(startCol) + "|" + std::to_string(endLine) + "|" + std::to_string(endCol);
 }
 
-inline void __func_enter(const std::string ctx, const std::string func_name)
+inline void __func_enter(const std::string ctx, const std::string func_name, const std::string args)
 {
-    __dbg_emit(ctx + "|" + func_name);
+    __dbg_emit(ctx + "|" + func_name + "|" + args);
 }
 
 inline void __func_exit(const std::string ctx)

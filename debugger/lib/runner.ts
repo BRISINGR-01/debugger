@@ -2,7 +2,7 @@ import { ChildProcess, spawn } from "node:child_process";
 
 export function run(command: string, cwd: string) {
   console.log(`[debugger] running: ${command} (in ${cwd})`);
-  const child = spawn(command, { cwd, stdio: "inherit", shell: false });
+  const child = spawn(command, { cwd, stdio: "inherit", shell: true });
   child.on("error", (err) =>
     console.error(`[debugger] failed: ${err.message}`),
   );

@@ -90,11 +90,48 @@ public:
             return true;
         }
 
-        RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func));
+        RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func, FD));
 
         // ── Wrap return statements ────────────────────────────────────────────
         walkForReturns(CS, FD, func);
 
+        return true;
+    }
+
+    bool VisitIfStmt(IfStmt *S)
+    {
+        ensureBraces(S->getThen());
+
+        // Wrap the else-branch UNLESS it's itself another `if`
+        // (that's a normal else-if chain and each `if` gets visited on its own).
+        if (Stmt *Else = S->getElse())
+            if (!isa<IfStmt>(Else))
+                ensureBraces(Else);
+
+        return true;
+    }
+
+    bool VisitWhileStmt(WhileStmt *S)
+    {
+        ensureBraces(S->getBody());
+        return true;
+    }
+
+    bool VisitDoStmt(DoStmt *S)
+    {
+        ensureBraces(S->getBody());
+        return true;
+    }
+
+    bool VisitForStmt(ForStmt *S)
+    {
+        ensureBraces(S->getBody());
+        return true;
+    }
+
+    bool VisitCXXForRangeStmt(CXXForRangeStmt *S)
+    {
+        ensureBraces(S->getBody());
         return true;
     }
 
@@ -159,8 +196,19 @@ private:
     {
         if (!body || isa<CompoundStmt>(body))
             return;
+
+        const LangOptions &LangOpts = Ctx.getLangOpts();
+
+        SourceLocation end = SM.getExpansionLoc(body->getEndLoc());
+
+        // Move end to just past the last token of the statement (handles the
+        // trailing ';' for expression/decl statements correctly).
+        end = Lexer::getLocForEndOfToken(end, 0, SM, LangOpts);
+        if (end.isInvalid())
+            return;
+
         RW.InsertTextBefore(body->getBeginLoc(), "{ ");
-        RW.InsertTextAfterToken(body->getEndLoc(), " }");
+        RW.InsertTextAfterToken(end, " }");
     }
 
     FunctionDecl *getEnclosingFunction(Decl *D)
@@ -200,20 +248,29 @@ public:
         : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts())
     {
         const std::filesystem::path currFile = __FILE__;
-        const std::filesystem::path impl_file = currFile.parent_path().parent_path() / "recorder" / "recorder.cpp";
+        const std::filesystem::path impl_path = currFile.parent_path().parent_path() / "recorder" / "recorder.cpp";
+        const std::filesystem::path print_h_path = currFile.parent_path().parent_path() / "recorder" / "dbg-header.hpp";
 
-        std::ifstream file(impl_file.c_str());
-        if (!file.is_open())
+        std::ifstream impl_file(impl_path.c_str());
+        if (!impl_file.is_open())
         {
-            std::cerr << "Error opening the file!" << std::endl;
+            std::cerr << "Error opening \"" << impl_path << '"' << std::endl;
+            exit(1);
+        }
+
+        std::ifstream print_h_file(print_h_path.c_str());
+        if (!print_h_file.is_open())
+        {
+            std::cerr << "Error opening \"" << print_h_path << '"' << std::endl;
             exit(1);
         }
 
         std::ostringstream ss;
-        ss << file.rdbuf();
+        ss << print_h_file.rdbuf() << impl_file.rdbuf();
         recorderImpl = ss.str();
 
-        file.close();
+        impl_file.close();
+        print_h_file.close();
     }
 
     void HandleTranslationUnit(ASTContext &Ctx) override

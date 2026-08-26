@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import type { LogEvent } from "../../../json-spec.ts";
 import { Server } from "http";
 import type Sink from "./sink.ts";
-import Config from "../config.ts";
+import { type Config } from "../config.ts";
 
 export default class HTTPServer extends EventEmitter implements Sink {
   private wss: WebSocketServer | null = null;
@@ -12,13 +12,10 @@ export default class HTTPServer extends EventEmitter implements Sink {
   private port: number = -1;
   data: LogEvent[];
 
-  constructor(data: LogEvent[]) {
+  constructor(data: LogEvent[], config: Config) {
     super();
     this.data = data;
-  }
-
-  applyConfig(config: Config) {
-    this.port = config.data.httpPort;
+    this.port = config.httpPort;
   }
 
   broadcast(logString: string) {
@@ -31,7 +28,7 @@ export default class HTTPServer extends EventEmitter implements Sink {
     }
   }
 
-  clear() {
+  async clear() {
     this.data.length = 0;
     this.emit("clear");
     for (const client of this.wss?.clients ?? []) {

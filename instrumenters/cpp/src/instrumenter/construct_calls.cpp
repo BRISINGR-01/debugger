@@ -1,27 +1,19 @@
 #include "include/construct_calls.hpp"
 
+const std::string var_to_str(const std::string rtext)
+{
+    return "static_cast<std::string>(debug().noloc()," + rtext + ")";
+}
+
 void addCtx(
     std::ostringstream &os, const std::string &kind, Loc &loc)
 {
-    os << "__dbg_fmt_ctx(__dbg_ctx_id, \"" << kind << "\", "
-       << loc.start.line << ", " << loc.start.col << ", "
-       << loc.end.line << ", " << loc.end.col << ")";
+    os << "__dbg_fmt_ctx(__dbg_ctx_id, \"" << kind << "\","
+       << loc.start.line << "," << loc.start.col << ","
+       << loc.end.line << "," << loc.end.col << ")";
 }
 
-// int __func_enter(const std::string &file,
-//                  u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol,
-//                  const std::string &func, std::vector<Arg> args = {});
-const std::string construct_func_enter(const std::string &file, Loc &loc, const std::string &func)
-{
-    std::ostringstream os;
-
-    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");__func_enter(";
-    addCtx(os, "enter", loc);
-    os << ", \"" << escape(func) << '"' << R_END;
-    return os.str();
-}
-
-const std::string constructArgs(clang::FunctionDecl *FD)
+const std::string construct_args(clang::FunctionDecl *FD)
 {
     std::ostringstream os;
 
@@ -36,29 +28,31 @@ const std::string constructArgs(clang::FunctionDecl *FD)
     }
 
     if (!hasParams)
-    {
-        os << R_END;
-        return os.str();
-    }
+        return "\"\"";
 
-    os << ",\n    std::vector<Arg>{\n";
-    bool first = true;
     for (const ParmVarDecl *P : FD->parameters())
     {
         if (P->getName().empty())
             continue;
-        if (!first)
-            os << ",\n";
-        first = false;
-        // constructArg(os, P);
         std::string name = P->getNameAsString();
         std::string type = typeStr(P->getType());
-        os << "      Arg{\"" << escape(name) << "\", "
-           << "ValueSnapshot::from(" << name << ", \""
-           << type << "\")}";
+        os << "\"{name:" << escape(name) << ",type:" << escape(type) << ",val:\\\"\" +" << var_to_str(name) << "+\"\\\"}\"";
     }
-    os << "\n    }";
 
+    return os.str();
+}
+
+// int __func_enter(const std::string &file,
+//                  u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol,
+//                  const std::string &func, std::vector<Arg> args = {});
+const std::string construct_func_enter(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD)
+{
+    std::ostringstream os;
+
+    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");__func_enter(";
+    addCtx(os, "enter", loc);
+    os << ", \"" << escape(func) << "\","
+       << construct_args(FD) << R_END;
     return os.str();
 }
 
@@ -79,7 +73,7 @@ const std::string construct_func_return(Loc &loc, ReturnStmt *RS, clang::SourceM
 
     os << "__func_return(";
     addCtx(os, "return", loc);
-    os << ", " << '"' << rtext << '"' << R_END;
+    os << ",\"{type:" << escape(tname) << ",val:\\\"\"+" << var_to_str(rtext) << "+\"\\\"}\"" << R_END;
     return os.str();
 }
 

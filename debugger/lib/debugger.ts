@@ -11,6 +11,7 @@ import { ChildProcess } from "node:child_process";
 import type { LogEvent } from "../../json-spec.ts";
 import type Sink from "./communication/sink.ts";
 import File from "./communication/file.ts";
+import StubSink from "./communication/stub.ts";
 
 export default class Debugger extends EventEmitter {
   child?: ChildProcess;
@@ -26,19 +27,27 @@ export default class Debugger extends EventEmitter {
   constructor(options: Config & { srcRoot: string }) {
     super();
     this.srcRoot = path.resolve(options.srcRoot ?? process.cwd());
-    this.debugDir = path.resolve(this.srcRoot, debugDirName);
+    this.debugDir = options.disable
+      ? this.srcRoot
+      : path.resolve(this.srcRoot, debugDirName);
 
     // this.sink = new HTTPServer(this.data);
-    this.config = loadConfig(options, this.debugDir);
-    this.sink = new File(this.data, "");
+    this.config = options.disable
+      ? options
+      : loadConfig(options, this.debugDir);
+    this.sink = options.disable
+      ? new StubSink()
+      : new File(this.data, this.config.ioFilePath!);
   }
 
   async start() {
-    setupDebugDir(this.srcRoot, this.config);
-    this.sink.applyConfig(this.config);
+    if (!this.config.disable) setupDebugDir(this.srcRoot, this.config);
 
     await this.sink.start();
+    await this.sink.clear();
     this.sink.on("data", (data: LogEvent) => {
+      console.log(data);
+
       if (isDev()) {
         fs.writeFileSync(
           "/home/alex/Desktop/VSC/debugger/debugger/lib/dev-log.tson",
@@ -55,10 +64,8 @@ export default class Debugger extends EventEmitter {
       this.watcher = watchChanges(
         this.srcRoot,
         this.debugDir,
-        this.config.excludePattern,
-        () => {
-          if (this.config.shouldRestart) this.scheduleRestart();
-        },
+        this.config,
+        () => this.scheduleRestart(),
       );
     }
 
@@ -80,6 +87,7 @@ export default class Debugger extends EventEmitter {
   }
 
   private scheduleRestart() {
+    this.sink.clear();
     clearTimeout(this.restartTimer);
     this.restartTimer = setTimeout(() => {
       killChild(this.child);

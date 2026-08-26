@@ -71,11 +71,17 @@ auto multiply = [](int x, int y)
 int val(int);
 int val2(int);
 
+const std::string str(int n)
+{
+    return "n";
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 int main()
 {
-    printf("%i\n", val(9));
+    printf("%s\n", str(9).c_str());
     return 0;
+    printf("%i\n", val(9));
     printf("%i\n", val2(9));
     int x = 10, u = 10;
     int y = 20;
