@@ -5,9 +5,16 @@ import picomatch from "picomatch";
 export const debugDirName = ".debug";
 
 export function parseGitignore(dir: string) {
-  const p = path.resolve(dir, ".gitignore");
-  if (!fs.existsSync(p)) return [];
+  let p = path.resolve(dir, ".gitignore");
+  while (!fs.existsSync(p)) {
+    const parent = path.resolve(dir, "..");
+    if (parent === dir) return [];
 
+    dir = parent;
+    p = path.resolve(dir, ".gitignore");
+  }
+
+  if (!fs.existsSync(p)) return [];
   return fs
     .readFileSync(p, "utf8")
     .split(/\r?\n/)
@@ -24,6 +31,7 @@ export function buildExcludeMatcher(sourceDir: string, userPatterns: string[]) {
     "**/__debugger__*",
     "*.d.ts",
   ];
+
   const git = parseGitignore(sourceDir);
   const all = [...always, ...git, ...userPatterns];
   return all.length > 0 ? picomatch(all, { matchBase: true }) : () => false;

@@ -41,7 +41,7 @@ std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const Source
     PresumedLoc p_start = SM.getPresumedLoc(start);
     if (p_start.isInvalid())
         return {};
-    PresumedLoc p_end = SM.getPresumedLoc(start);
+    PresumedLoc p_end = SM.getPresumedLoc(end);
     if (p_end.isInvalid())
         return {};
 

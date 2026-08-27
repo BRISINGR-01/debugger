@@ -51,6 +51,9 @@ public:
     // ── Functions ─────────────────────────────────────────────────────────────
     bool VisitFunctionDecl(FunctionDecl *FD)
     {
+        // std::string func1 = FD->getQualifiedNameAsString();
+        // std::cout << func1 << std::endl;
+
         if (!FD->hasBody() || !FD->isThisDeclarationADefinition()) // Only visit function definitions, skip declarations.
             return true;
         if (FD->isImplicit()) // Skip if already instrumented in this pass or if it's a compiler builtin.
@@ -73,7 +76,6 @@ public:
         PresumedLoc p_start = SM.getPresumedLoc(bodyStart);
         if (p_start.isInvalid())
             return true;
-        std::string file = p_start.getFilename();
 
         CompoundStmt *CS = dyn_cast<CompoundStmt>(body);
         if (!CS)
@@ -90,10 +92,28 @@ public:
             return true;
         }
 
+        std::string file = p_start.getFilename();
         RW.InsertTextAfter(insertPt, construct_func_enter(file, *location, func, FD));
 
         // ── Wrap return statements ────────────────────────────────────────────
         walkForReturns(CS, FD, func);
+
+        std::cout << func << std::endl;
+
+        if (FD->getReturnType()->isVoidType())
+        {
+            SourceLocation insertLoc = CS->getRBracLoc();
+
+            auto endLocation = getLoc(insertLoc, insertLoc, SM);
+            if (endLocation.has_value())
+            {
+                RW.InsertTextAfter(insertLoc, construct_func_exit(*endLocation));
+            }
+            else
+            {
+                RW.InsertTextAfter(insertLoc, construct_func_exit(*location));
+            }
+        }
 
         return true;
     }
@@ -244,6 +264,8 @@ class InstrumenterConsumer : public ASTConsumer
 {
 public:
     std::string outputDir;
+    std::string srcRoot;
+
     explicit InstrumenterConsumer(CompilerInstance &CI)
         : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts())
     {
@@ -277,11 +299,24 @@ public:
     {
         SourceManager &SM = Ctx.getSourceManager();
 
-        // Build a quick FunctionDecl lookup by source range.
-        // We gather all FDs first, then provide a closure.
+        // Filter FunctionDecl lookup
         std::vector<std::pair<SourceRange, FunctionDecl *>> fdRanges;
         for (auto *D : Ctx.getTranslationUnitDecl()->decls())
         {
+            SourceLocation loc = D->getLocation();
+            if (loc.isInvalid())
+                continue;
+
+            auto p_loc = SM.getPresumedLoc(loc);
+            if (p_loc.isInvalid())
+                continue;
+            std::string file = p_loc.getFilename();
+            // Skip decls outside your source tree
+            if (!file.starts_with(srcRoot))
+                continue;
+
+            std::cout << file << std::endl;
+
             if (auto *FD = dyn_cast<FunctionDecl>(D))
             {
                 if (FD->hasBody())
@@ -315,17 +350,24 @@ public:
         };
 
         visitor.TraverseDecl(Ctx.getTranslationUnitDecl());
-        // visitor.flushPendingAssignments();
 
-        // Write rewritten buffers back to source files
+        // Filter Rewriter output
         for (auto I = RW.buffer_begin(), E = RW.buffer_end(); I != E; ++I)
         {
-            const FileEntry *FE =
-                SM.getFileEntryForID(I->first);
+            const FileEntry *FE = SM.getFileEntryForID(I->first);
             if (!FE)
                 continue;
 
+            SourceLocation fileStartLoc = SM.getLocForStartOfFile(I->first);
+
             std::filesystem::path file = FE->tryGetRealPathName().str();
+
+            // Skip writing files that are outside your workspace or are system headers
+            if (!file.string().starts_with(srcRoot))
+                continue;
+
+            std::cout << file << std::endl;
+
             std::filesystem::path out = outputDir;
             out /= file.filename();
 
@@ -354,6 +396,7 @@ class InstrumenterAction : public PluginASTAction
 
 private:
     std::string outputDir;
+    std::string srcRoot;
 
 public:
     std::unique_ptr<ASTConsumer>
@@ -361,6 +404,7 @@ public:
     {
         auto IC = std::make_unique<InstrumenterConsumer>(CI);
         IC->outputDir = outputDir;
+        IC->srcRoot = srcRoot;
         return IC;
     }
 
@@ -374,6 +418,7 @@ public:
         }
 
         outputDir = args[0];
+        srcRoot = std::filesystem::path(outputDir).parent_path();
         return true;
     }
 
