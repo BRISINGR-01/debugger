@@ -84,11 +84,14 @@ void fn()
 // ── Main ──────────────────────────────────────────────────────────────────
 int main()
 {
-    fn();
-    return 0;
-    printf("%s\n", str(9).c_str());
-    printf("%i\n", val(9));
-    printf("%i\n", val2(9));
+    // int a = 9, b, cc = -1;
+    // a++;
+    // cc = 9 * (a + 1);
+    // fn();
+    // return 0;
+    // printf("%s\n", str(9).c_str());
+    // printf("%i\n", val(9));
+    // printf("%i\n", val2(9));
     int x = 10, u = 10;
     int y = 20;
     y += 5;

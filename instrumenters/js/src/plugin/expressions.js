@@ -230,7 +230,7 @@ export default {
   }),
   BinaryExpression: safeInst((path) => {
     path.replaceWith(
-      emitCall("expression", [
+      emitCall("expr", [
         prop("value", path.node, false),
         getLocProp(path.node),
       ]),
@@ -256,11 +256,8 @@ export default {
 
     path.replaceWith(
       emitCall(
-        "read",
-        [
-          prop("variable", createVar(varName, "kind", t.cloneNode(path.node))),
-          getLocProp(path.node),
-        ],
+        "expr",
+        [prop("val", t.cloneNode(path.node)), getLocProp(path.node)],
         true,
       ),
     );

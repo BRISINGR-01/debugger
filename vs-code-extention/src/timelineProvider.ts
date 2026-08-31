@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { TraceModel } from "./model";
 import { formatEventInline, formatLoc } from "./format";
+import { getFile } from "./utils";
 
 export class TimelineProvider implements vscode.TreeDataProvider<number> {
   private _onDidChangeTreeData = new vscode.EventEmitter<void>();
@@ -17,12 +18,11 @@ export class TimelineProvider implements vscode.TreeDataProvider<number> {
     if (element !== undefined) {
       return [];
     }
-    return this.model.events.map((_, i: number) => i);
+    return this.model.events.events.map((_, i: number) => i);
   }
 
   getTreeItem(index: number): vscode.TreeItem {
-    const ev = this.model.events[index];
-    const loc = this.model.locations[index];
+    const ev = this.model.events.get(index);
     const summary = formatEventInline(ev) ?? ev.event;
     const label = `${ev.time.toFixed(3)}  ${summary}`;
 
@@ -30,10 +30,8 @@ export class TimelineProvider implements vscode.TreeDataProvider<number> {
       label,
       vscode.TreeItemCollapsibleState.None,
     );
-    item.description = loc
-      ? `${path.basename(loc.file)}:${loc.line + 1}`
-      : undefined;
-    item.tooltip = loc ? formatLoc(loc) : undefined;
+    item.description = `${path.basename(getFile(ev))}:${ev.loc.start.line + 1}`;
+    // item.tooltip = loc ? formatLoc(loc) : undefined;
     item.iconPath = this.iconFor(ev.event);
     item.command = {
       command: "traceViewer.jumpToEvent",

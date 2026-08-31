@@ -11,13 +11,15 @@ export default class File extends EventEmitter implements Sink {
   watcher: FSWatcher;
   offset = 0;
   paused = false;
+  url: URL;
 
-  constructor(data: LogEvent[], path: string) {
+  constructor(data: LogEvent[], config: Config) {
     super();
 
     this.data = data;
-    this.path = path;
-    this.watcher = chokidar.watch(path);
+    this.path = config.ioFilePath!;
+    this.watcher = chokidar.watch(this.path);
+    this.url = new URL(`http://localhost:${config.httpPort}`);
   }
 
   async start() {
@@ -44,11 +46,22 @@ export default class File extends EventEmitter implements Sink {
     stream.on("data", (chunk: Buffer) => {
       bytesRead += chunk.length;
 
-      console.log(chunk.toString());
+      chunk.forEach((b) => this.send(b.toString()));
     });
 
     stream.on("end", () => (this.offset += bytesRead));
     stream.on("error", console.error);
+  }
+
+  async send(ev: string) {
+    fetch(`${this.url}/log`, {
+      method: "POST",
+      body: JSON.stringify(ev),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
   }
 
   async stop(): Promise<void> {

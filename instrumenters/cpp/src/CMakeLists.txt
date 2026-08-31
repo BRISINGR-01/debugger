@@ -26,10 +26,13 @@ add_definitions(${LLVM_DEFINITIONS})
 # must be resolved at runtime from the host, not linked statically.
 add_library(Instrumenter MODULE 
     instrumenter/instrumenter.cpp
+    instrumenter/functions.cpp
+    instrumenter/expressions.cpp
+        instrumenter/include/instrumenter.hpp
     instrumenter/utils.cpp 
-    instrumenter/include/utils.hpp
-    instrumenter/include/construct_calls.hpp 
+        instrumenter/include/utils.hpp
     instrumenter/construct_calls.cpp 
+        instrumenter/include/construct_calls.hpp 
     )
 
 

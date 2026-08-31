@@ -1,4 +1,4 @@
-export type Id = string; // <file>@<int>
+export type Id = string; // <file>@<fn_decl line>:<int>
 export type Loc = {
   start: {
     line: number;
@@ -30,7 +30,7 @@ export type CallEvent = Event & {
 
 export type EnterEvent = Event & {
   event: "enter";
-  fn_name: string; // for declaration/change it is the function in which it happens or "global_space" is not in a function
+  fn_name: string;
   args: ({ loc: Loc } & Var)[];
 };
 
@@ -50,7 +50,13 @@ export type ChangeEvent = Event & {
   old_val: string;
 };
 
-export type ErrorEvent = Event & {
+export type Expression = Event & {
+  event: "expr";
+  val: string;
+};
+
+export type ThrowEvent = Event & {
+  event: "throw";
   error: string;
 };
 
@@ -65,13 +71,7 @@ export type CatchEnterEvent = Event & {
 
 export type IfEvent = Event & {
   event: "if";
-  value: string;
-};
-
-export type IfBranchEvent = Event & {
-  event: "if_branch";
-  branch: "then" | "else_if" | "else";
-  branchIndex: number;
+  isTruthy: boolean;
 };
 
 export type InstError = Event & {
@@ -81,12 +81,13 @@ export type InstError = Event & {
 
 export type LogEvent =
   | CallEvent
+  | Expression
   | EnterEvent
   | ExitEvent
-  | DeclareEvent
   | ChangeEvent
+  | DeclareEvent
   | TryEnterEvent
+  | ThrowEvent
   | CatchEnterEvent
   | IfEvent
-  | IfBranchEvent
   | InstError;

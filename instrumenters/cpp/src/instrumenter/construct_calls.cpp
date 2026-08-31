@@ -1,8 +1,8 @@
 #include "include/construct_calls.hpp"
 
-const std::string var_to_str(const std::string rtext)
+const std::string to_dbg_str(const std::string rtext)
 {
-    return "static_cast<std::string>(debug().noloc()," + rtext + ")";
+    return "__DBG(" + rtext + ")";
 }
 
 void addCtx(
@@ -13,8 +13,7 @@ void addCtx(
        << loc.end.line << "," << loc.end.col << ")";
 }
 
-int construct_args(
-    std::ostringstream &os, clang::FunctionDecl *FD)
+int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const LangOptions &LO)
 {
     int args_count = 0;
     for (const ParmVarDecl *P : FD->parameters())
@@ -30,8 +29,8 @@ int construct_args(
         if (P->getName().empty())
             continue;
         std::string name = P->getNameAsString();
-        std::string type = typeStr(P->getType());
-        os << "{\"" << escape(name) << "\",\"" << escape(type) << "\"," << var_to_str(name) << "},";
+        std::string type = typeStr(P->getType(), LO);
+        os << "{\"" << escape(name) << "\",\"" << escape(type) << "\"," << to_dbg_str(name) << "},";
     }
 
     os << "};\n";
@@ -42,10 +41,10 @@ int construct_args(
 // int __func_enter(const std::string &file,
 //                  u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol,
 //                  const std::string &func, std::vector<Arg> args = {});
-const std::string construct_func_enter(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD)
+const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const LangOptions &LO)
 {
     std::ostringstream os;
-    int args_count = construct_args(os, FD);
+    int args_count = construct_args(os, FD, LO);
     os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");\n"
        << "__func_enter(";
     addCtx(os, "enter", loc);
@@ -53,32 +52,69 @@ const std::string construct_func_enter(const std::string &file, Loc &loc, const 
     return os.str();
 }
 
-const std::string construct_func_return(Loc &loc, ReturnStmt *RS, clang::SourceManager &SM, const clang::LangOptions &LO)
+const std::string construct_func_return_ev(Loc &loc, ReturnStmt *RS, clang::SourceManager &SM, const clang::LangOptions &LO)
 {
     Expr *retVal = RS->getRetValue();
     if (!retVal)
-        return construct_func_exit(loc);
+        return construct_func_exit_ev(loc);
     std::string rtext = exprText(retVal, SM, LO);
     if (rtext.empty())
-        return construct_func_exit(loc);
+        return construct_func_exit_ev(loc);
 
-    std::string tname = typeStr(retVal->getType());
+    std::string tname = typeStr(retVal->getType(), LO);
     std::ostringstream os;
 
     os << "__func_return(";
     addCtx(os, "exit", loc);
-    os << ",\"" << escape(tname) << "\"," << var_to_str(rtext) << ");\n";
+    os << ",\"" << escape(tname) << "\"," << to_dbg_str(rtext) << ");\n";
     return os.str();
 }
 
-// void __func_exit(int ctxId,
-//                  u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol);
-const std::string construct_func_exit(Loc &loc)
+const std::string construct_func_exit_ev(Loc &loc)
 {
     std::ostringstream os;
     os << "__func_exit(";
     addCtx(os, "exit", loc);
     os << ");\n";
+
+    return os.str();
+}
+
+const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD, const LangOptions &LO)
+{
+
+    std::string name = VD->getNameAsString();
+    std::string type = typeStr(VD->getType(), LO);
+
+    std::ostringstream os;
+    os << "__var_decl(";
+    addCtx(os, "declare", loc);
+    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(name) << ");\n";
+
+    return os.str();
+}
+
+const std::string construct_var_assign(const std::string type, const std::string name, const std::string expr)
+{
+    return type + " " + name + " = " + expr + ";\n";
+}
+
+const std::string construct_expr_ev(Loc &loc, const std::string type, const std::string tmpVarName)
+{
+    std::ostringstream os;
+    os << "__expr(";
+    addCtx(os, "expr", loc);
+    os << ", \"" << type << "\", " << to_dbg_str(tmpVarName) << ");\n";
+
+    return os.str();
+}
+
+const std::string construct_assign_ev(Loc &loc, const std::string type, const std::string name, const std::string oldVarName, const std::string tmpVarName)
+{
+    std::ostringstream os;
+    os << "__var_change(";
+    addCtx(os, "change", loc);
+    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(tmpVarName) << ", " << to_dbg_str(oldVarName) << ");\n";
 
     return os.str();
 }

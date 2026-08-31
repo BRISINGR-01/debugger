@@ -38,9 +38,11 @@ struct Loc
 
 std::string escape(std::string s);
 
-std::string typeStr(QualType qt);
+std::string typeStr(QualType qt, const LangOptions &LO);
 // Get the source text of an expression (may be empty on failure).
 std::string exprText(const Expr *e, const SourceManager &SM,
                      const LangOptions &LO);
 std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const SourceManager &SM);
 bool shouldSkipFn(const std::string &funcName);
+std::string getLambdaVariableName(CXXMethodDecl *FD, ASTContext &Ctx);
+std::string exprStr(Expr *E, SourceManager &SM);

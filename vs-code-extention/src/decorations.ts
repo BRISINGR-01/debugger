@@ -1,13 +1,12 @@
 import * as vscode from "vscode";
 import { TraceModel } from "./model";
-import { TraceEvent, ParsedLocation } from "./types";
 import {
-  annotationPosition,
   formatEventValue,
   formatEventMarkdown,
   formatArgValue,
 } from "./format";
-import { parseLoc } from "./logParser";
+import { Loc, LogEvent } from "./json-spec";
+import { vsRange } from "./utils";
 
 export class DecorationManager {
   private decorationType: vscode.TextEditorDecorationType;
@@ -49,7 +48,9 @@ export class DecorationManager {
     });
   }
 
-  private createIfDecorationType(color: string): vscode.TextEditorDecorationType {
+  private createIfDecorationType(
+    color: string,
+  ): vscode.TextEditorDecorationType {
     return vscode.window.createTextEditorDecorationType({
       isWholeLine: false,
       textDecoration: `underline ${color}`,
@@ -60,29 +61,31 @@ export class DecorationManager {
     this.enabled = !this.enabled;
   }
 
-  isEnabled(): boolean {
+  get isEnabled() {
     return this.enabled;
   }
 
   clearLines(affectedLines: Set<number>): void {
     const editor = this.lastEditor;
     if (!editor) return;
-    const filtered = this.currentOptions.filter(
-      (o) => !affectedLines.has(o.range.start.line),
+    const isNotAffected = (o: vscode.DecorationOptions) =>
+      !affectedLines.has(o.range.start.line);
+    editor.setDecorations(
+      this.decorationType,
+      this.currentOptions.filter(isNotAffected),
     );
-    const filteredThrow = this.currentThrowOptions.filter(
-      (o) => !affectedLines.has(o.range.start.line),
+    editor.setDecorations(
+      this.throwDecorationType,
+      this.currentThrowOptions.filter(isNotAffected),
     );
-    const filteredIfTrue = this.currentIfTrueOptions.filter(
-      (o) => !affectedLines.has(o.range.start.line),
+    editor.setDecorations(
+      this.ifTrueDecorationType,
+      this.currentIfTrueOptions.filter(isNotAffected),
     );
-    const filteredIfFalse = this.currentIfFalseOptions.filter(
-      (o) => !affectedLines.has(o.range.start.line),
+    editor.setDecorations(
+      this.ifFalseDecorationType,
+      this.currentIfFalseOptions.filter(isNotAffected),
     );
-    editor.setDecorations(this.decorationType, filtered);
-    editor.setDecorations(this.throwDecorationType, filteredThrow);
-    editor.setDecorations(this.ifTrueDecorationType, filteredIfTrue);
-    editor.setDecorations(this.ifFalseDecorationType, filteredIfFalse);
   }
 
   refresh(editor: vscode.TextEditor | undefined): void {
@@ -98,8 +101,8 @@ export class DecorationManager {
     }
 
     const filePath = editor.document.uri.fsPath;
-    const indices = this.model.getFileEventIndices(filePath);
-    if (indices.length === 0) {
+    const events = this.model.events.getFileEvents(filePath);
+    if (events.length === 0) {
       editor.setDecorations(this.decorationType, []);
       editor.setDecorations(this.throwDecorationType, []);
       editor.setDecorations(this.ifTrueDecorationType, []);
@@ -110,7 +113,7 @@ export class DecorationManager {
     const document = editor.document;
     const current = this.model.currentIndex;
     // annotation position ("line:col") -> best event index to annotate there
-    const best = new Map<string, number>();
+    const best = new Map<string, LogEvent>();
     const argBest = new Map<
       string,
       { idx: number; arg: { name: string; type: string; value: string } }
@@ -118,90 +121,76 @@ export class DecorationManager {
     const throwOptions: vscode.DecorationOptions[] = [];
     const ifTrueOptions: vscode.DecorationOptions[] = [];
     const ifFalseOptions: vscode.DecorationOptions[] = [];
+    const options: vscode.DecorationOptions[] = [];
 
-    for (const idx of indices) {
-      if (idx > current) break;
+    for (const ev of events) {
+      switch (ev.event) {
+        case "throw":
+          const range = new vscode.Range(
+            ev.loc.start.line,
+            ev.loc.start.col,
+            ev.loc.end.line,
+            ev.loc.end.col,
+          );
 
-      const ev = this.model.events[idx];
-      const loc = this.model.locations[idx];
-
-      if (!loc) continue;
-
-      if (ev.event === "throw") {
-        const range = this.throwRange(document, loc);
-        if (range) {
           const md = new vscode.MarkdownString();
           md.isTrusted = false;
           md.appendMarkdown(`**Throw**\n\n${formatEventMarkdown(ev)}`);
           throwOptions.push({ range, hoverMessage: md });
-        }
-        continue;
-      }
-
-      if (ev.event === "if") {
-        const range = this.clampedRange(document, loc);
-        if (range) {
-          const val = String(ev.value);
-          // Look ahead for the if_branch event to determine taken branch
-          const nextIdx = idx + 1;
-          const nextEv =
-            nextIdx < this.model.events.length
-              ? this.model.events[nextIdx]
-              : undefined;
-          const branch = nextEv?.event === "if_branch" ? nextEv.branch : undefined;
-          const isTruthy = branch !== "else" && branch !== "else_if";
-          const md = new vscode.MarkdownString();
-          md.isTrusted = false;
-          md.appendMarkdown(
-            `**if** \`${val}\` → **${isTruthy ? "then" : "else"}**`,
-          );
-          if (isTruthy) {
-            ifTrueOptions.push({ range, hoverMessage: md });
-          } else {
-            ifFalseOptions.push({ range, hoverMessage: md });
+          break;
+        case "if":
+          {
+            const range = vsRange(ev);
+            const md = new vscode.MarkdownString();
+            md.isTrusted = false;
+            md.appendMarkdown(`**if** → **${ev.isTruthy ? "then" : "else"}**`);
+            if (ev.isTruthy) {
+              ifTrueOptions.push({ range, hoverMessage: md });
+            } else {
+              ifFalseOptions.push({ range, hoverMessage: md });
+            }
           }
-        }
-        continue;
-      }
+          break;
+        case "enter":
+          for (const arg of ev.args) {
+            const line = arg.loc.start.line;
+            const col = arg.loc.start.col;
 
-      if (ev.event === "enter" && ev.args) {
-        for (const arg of ev.args) {
-          const argLoc = parseLoc(arg.loc);
-          if (!argLoc) continue;
-          const line = argLoc.endLine;
-          const character = argLoc.endColumn;
-          if (line < 0 || line >= document.lineCount) continue;
-          const lineText = document.lineAt(line).text;
-          const clampedChar = Math.min(character, lineText.length);
-          const key = `${line}:${clampedChar}`;
-          const prev = argBest.get(key);
-          if (!prev || idx > prev.idx) {
-            argBest.set(key, { idx, arg });
+            const lineText = document.lineAt(line).text;
+            const clampedChar = Math.min(col, lineText.length);
+
+            const text = formatArgValue(arg.value);
+            const md = new vscode.MarkdownString();
+            md.isTrusted = false;
+            md.appendMarkdown(
+              `**${arg.name}**: \`${arg.type}\` = \`${arg.value}\``,
+            );
+            options.push({
+              range: new vscode.Range(line, clampedChar, line, clampedChar),
+              renderOptions: { after: { contentText: `(${text})` } },
+              hoverMessage: md,
+            });
           }
-        }
-        continue;
+          break;
+        default:
+          break;
       }
 
       if (!formatEventValue(ev)) continue;
 
-      const pos = this.annotationPosition(document, ev, loc);
+      const pos = this.annotationPosition(document, ev, ev.loc);
       if (!pos) continue;
       if (pos.line < 0 || pos.line >= document.lineCount) continue;
 
       const key = `${pos.line}:${pos.character}`;
       const prev = best.get(key);
-      if (
-        !prev ||
-        better(ev, loc, this.model.events[prev], this.model.locations[prev]!)
-      ) {
-        best.set(key, idx);
+      if (!prev || better(ev, prev)) {
+        best.set(key, ev);
       }
     }
 
-    const options: vscode.DecorationOptions[] = [];
-    for (const idx of best.values()) {
-      const ev = this.model.events[idx];
-      const loc = this.model.locations[idx]!;
+    for (const ev of best.values()) {
+      const loc = ev.loc;
       const pos = this.annotationPosition(document, ev, loc)!;
       const text = formatEventValue(ev)!;
       options.push({
@@ -212,23 +201,7 @@ export class DecorationManager {
           pos.character,
         ),
         renderOptions: { after: { contentText: `(${text})` } },
-        hoverMessage: this.buildHover(filePath, loc.line),
-      });
-    }
-    for (const [key, entry] of argBest) {
-      const [lineStr, charStr] = key.split(":");
-      const line = parseInt(lineStr, 10);
-      const character = parseInt(charStr, 10);
-      const text = formatArgValue(entry.arg.value);
-      const md = new vscode.MarkdownString();
-      md.isTrusted = false;
-      md.appendMarkdown(
-        `**${entry.arg.name}**: \`${entry.arg.type}\` = \`${entry.arg.value}\``,
-      );
-      options.push({
-        range: new vscode.Range(line, character, line, character),
-        renderOptions: { after: { contentText: `(${text})` } },
-        hoverMessage: md,
+        hoverMessage: this.buildHover(filePath, loc.start.line),
       });
     }
     editor.setDecorations(this.decorationType, options);
@@ -241,41 +214,18 @@ export class DecorationManager {
     this.currentIfFalseOptions = ifFalseOptions;
   }
 
-  /**
-   * Marker range for a throw event: the line the throw actually happened on
-   * (the event's recorded start line), from its start column to end of line.
-   * No source scanning — only lines recorded as throwing get a marker.
-   */
-  private throwRange(
-    document: vscode.TextDocument,
-    loc: ParsedLocation,
-  ): vscode.Range | undefined {
-    if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
-    const lineText = document.lineAt(loc.line).text;
-    const startChar = Math.min(loc.column, lineText.length);
-    return new vscode.Range(loc.line, startChar, loc.line, lineText.length);
-  }
-
-  private clampedRange(
-    document: vscode.TextDocument,
-    loc: ParsedLocation,
-  ): vscode.Range | undefined {
-    if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
-    const startLine = Math.min(loc.line, document.lineCount - 1);
-    const endLine = Math.min(loc.endLine, document.lineCount - 1);
-    const startChar = Math.min(loc.column, document.lineAt(startLine).text.length);
-    const endChar = Math.min(loc.endColumn, document.lineAt(endLine).text.length);
-    return new vscode.Range(startLine, startChar, endLine, endChar);
-  }
-
   /** Clamped annotation position using the shared layout rules. */
   private annotationPosition(
     document: vscode.TextDocument,
-    ev: TraceEvent,
-    loc: ParsedLocation,
+    ev: LogEvent,
+    loc: Loc,
   ): { line: number; character: number } | undefined {
-    if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
-    return annotationPosition(ev, loc, document.lineAt(loc.line).text);
+    if (loc.start.line < 0 || loc.end.line >= document.lineCount)
+      return undefined;
+    return {
+      line: ev.loc.end.line,
+      character: ev.loc.end.col,
+    };
   }
 
   private buildHover(filePath: string, line: number): vscode.MarkdownString {
@@ -285,9 +235,11 @@ export class DecorationManager {
       `**Trace history for this line** (${history.length} event${history.length === 1 ? "" : "s"})\n\n`,
     );
     const shown = history.slice(0, 20);
-    for (const idx of shown) {
-      const ev = this.model.events[idx];
-      const marker = idx === this.model.currentIndex ? "**→ current** " : "";
+    for (const ev of shown) {
+      const marker =
+        ev === this.model.events.get(this.model.currentIndex)
+          ? "**→ current** "
+          : "";
       md.appendMarkdown(`${marker}${formatEventMarkdown(ev)}\n\n`);
     }
     if (history.length > shown.length) {
@@ -311,24 +263,20 @@ export class DecorationManager {
  * otherwise identical (e.g. a variable read at the same spot on every loop
  * iteration) the later entry in the log wins, so the latest value shows.
  */
-function better(
-  a: TraceEvent,
-  aloc: ParsedLocation,
-  b: TraceEvent,
-  bloc: ParsedLocation,
-): boolean {
+function better(a: LogEvent, b: LogEvent): boolean {
   const pa = priority(a);
   const pb = priority(b);
   if (pa !== pb) return pa < pb;
-  const aa = area(aloc);
-  const ab = area(bloc);
+  const aa = area(a);
+  const ab = area(b);
   if (aa !== ab) return aa < ab;
   return true;
 }
 
-function priority(ev: TraceEvent): number {
+function priority(ev: LogEvent): number {
   switch (ev.event) {
     case "change":
+    case "expr":
       return 0;
     case "call":
       return 1;
@@ -337,6 +285,8 @@ function priority(ev: TraceEvent): number {
   }
 }
 
-function area(loc: ParsedLocation): number {
-  return (loc.endLine - loc.line) * 100000 + (loc.endColumn - loc.column);
+function area({ loc }: LogEvent): number {
+  return (
+    (loc.end.line - loc.start.line) * 100000 + (loc.end.col - loc.start.col)
+  );
 }

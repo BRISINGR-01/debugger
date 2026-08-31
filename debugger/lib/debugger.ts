@@ -37,7 +37,7 @@ export default class Debugger extends EventEmitter {
       : loadConfig(options, this.debugDir);
     this.sink = options.disable
       ? new StubSink()
-      : new File(this.data, this.config.ioFilePath!);
+      : new File(this.data, this.config);
   }
 
   async start() {

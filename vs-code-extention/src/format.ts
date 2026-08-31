@@ -1,5 +1,4 @@
-import { Var } from "./json-spec";
-import { TraceEvent, ParsedLocation } from "./types";
+import { Loc, LogEvent, Var } from "./json-spec";
 
 function truncate(s: string, max = 120): string {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
@@ -19,58 +18,36 @@ function safeStringify(v: unknown): string {
 }
 
 /** Human-readable location string, e.g. "path/to/file:5:2-7" or "…:5:2-6:3". */
-export function formatLoc(loc: ParsedLocation): string {
-  const start = `${loc.file}:${loc.line + 1}:${loc.column + 1}`;
-  if (loc.endLine === loc.line) {
-    return `${start}-${loc.endColumn + 1}`;
+export function formatLoc(file: string, loc: Loc): string {
+  const start = `${file}:${loc.start.line + 1}:${loc.start.col + 1}`;
+  if (loc.end.line === loc.start.line) {
+    return `${start}-${loc.end.col + 1}`;
   }
-  return `${start}-${loc.endLine + 1}:${loc.endColumn + 1}`;
+  return `${start}-${loc.end.line + 1}:${loc.end.col + 1}`;
 }
 
 /** Short, single-line summary for inline decorations. */
-export function formatEventInline(ev: TraceEvent): string | undefined {
+export function formatEventInline(ev: LogEvent): string | undefined {
   switch (ev.event) {
     case "declare": {
-      const v = ev.variable;
-      if (!v) {
-        return undefined;
-      }
-      return `${v.name}: ${v.type} = ${truncate(v.value ?? "undefined")}`;
+      return `${ev.var.name}: ${ev.var.type} = ${truncate(ev.var.value ?? "undefined")}`;
     }
     case "call":
       return `→ ${ev.callee ?? "(call)"}`;
-    case "read": {
-      const v = ev.variable;
-      if (!v) {
-        return undefined;
-      }
-      return `${v.name} = ${truncate(v.value ?? "undefined")}`;
-    }
     case "enter": {
       const args = (ev.args ?? [])
         .map((a: Var) => `${a.name}=${truncate(String(a.value))}`)
         .join(", ");
-      return `▶ enter ${ev.function_name ?? ""}(${args})`;
+      return `▶ enter ${ev.fn_name ?? ""}(${args})`;
     }
-    case "return":
-      return "value" in ev
-        ? `⏎ return ${truncate(safeStringify(ev.value))}`
+    case "exit":
+      return ev.return_val
+        ? `⏎ return ${truncate(safeStringify(ev.return_val))}`
         : "⏎ return";
     case "throw":
       return `⚠ throw${ev.error ? " " + truncate(safeStringify(ev.error)) : ""}`;
     case "if": {
-      const val = String(ev.value);
-      const isTruthy = val !== "false" && val !== "0" && val !== "" && val !== "null" && val !== "undefined" && val !== "NaN";
-      return `◇ if ${truncate(val)} → ${isTruthy ? "then" : "else"}`;
-    }
-    case "if_branch": {
-      const name =
-        ev.branch === "then"
-          ? "then"
-          : ev.branch === "else_if"
-            ? `else if`
-            : `else`;
-      return `◆ ${name}`;
+      return `◇ if → ${ev.isTruthy ? "then" : "else"}`;
     }
     default:
       return `• ${ev.event}`;
@@ -83,26 +60,19 @@ function singleLine(s: string): string {
 }
 
 /** Compact value snippet for inline annotations next to the traced code. */
-export function formatEventValue(ev: TraceEvent): string | undefined {
+export function formatEventValue(ev: LogEvent): string | undefined {
   switch (ev.event) {
-    case "read":
     case "change":
-      return ev.variable
-        ? truncate(singleLine(safeStringify(ev.variable.value)), 80)
-        : undefined;
+      return truncate(singleLine(safeStringify(ev.var.value)), 80);
     case "expr":
-    case "expression":
-    case "return":
-      return ev.value !== undefined
-        ? truncate(singleLine(safeStringify(ev.value)), 80)
+      return truncate(singleLine(safeStringify(ev.val)), 80);
+    case "exit":
+      return ev.return_val !== undefined
+        ? truncate(singleLine(safeStringify(ev.return_val)), 80)
         : undefined;
     case "call":
       return ev.value !== undefined
         ? truncate(singleLine(safeStringify(ev.value)), 80)
-        : undefined;
-    case "exit":
-      return ev.returnVal !== undefined
-        ? truncate(singleLine(safeStringify(ev.returnVal)), 80)
         : undefined;
     default:
       return undefined;
@@ -114,73 +84,25 @@ export function formatArgValue(value: string): string {
   return truncate(singleLine(safeStringify(value)), 80);
 }
 
-/**
- * Where an event's `(value)` annotation is placed (0-based):
- * - assignments (`change`) sit right after the assigned variable name,
- * - declarations (`declare`) sit right after the declared name when it can be
- *   found, otherwise at the end of the declaration,
- * - everything else (reads, expressions, calls, …) sits right after the
- *   expression it was recorded for.
- *
- * `lineText` must be the text of `loc.line`.
- */
-export function annotationPosition(
-  ev: TraceEvent,
-  loc: ParsedLocation,
-  lineText: string,
-): { line: number; character: number } {
-  const name = ev.variable?.name;
-  if (ev.event === "change" && name) {
-    return { line: loc.line, character: loc.column + name.length };
-  }
-  if (ev.event === "declare" && name) {
-    const text = lineText.slice(loc.column);
-    const m = /^(?:let|const|var)\s+[A-Za-z_$][\w$]*/.exec(text);
-    if (m) {
-      return { line: loc.line, character: loc.column + m[0].length };
-    }
-  }
-  return { line: loc.endLine, character: loc.endColumn };
-}
-
 /** Longer, multi-line markdown summary for hovers / tree items. */
-export function formatEventMarkdown(ev: TraceEvent): string {
+export function formatEventMarkdown(ev: LogEvent): string {
   const lines: string[] = [];
   lines.push(`**${ev.event}** — t=${ev.time}`);
-  if (ev.fn_id !== undefined) {
-    lines.push(`fn_id: \`${ev.fn_id}\``);
-  }
+  lines.push(`ctx_id: \`${ev.ctx_id}\``);
+
   switch (ev.event) {
     case "declare":
-      if (ev.variable) {
-        lines.push(
-          `\`${ev.variable.name}: ${ev.variable.type} = ${ev.variable.value}\``,
-        );
+      lines.push(`\`${ev.var.name}: ${ev.var.type} = ${ev.var.value}\``);
+      break;
+    case "change":
+      lines.push(`\`${ev.var.name}: ${ev.var.type} → ${ev.var.value}\``);
+
+      if ("old_val" in ev) {
+        lines.push(`old value: \`${safeStringify(ev.old_val)}\``);
       }
       break;
-    case "read":
-      if (ev.variable) {
-        lines.push(
-          `\`${ev.variable.name}: ${ev.variable.type} = ${ev.variable.value}\``,
-        );
-      }
-      break;
-    case "change": {
-      if (ev.variable) {
-        lines.push(
-          `\`${ev.variable.name}: ${ev.variable.type} → ${ev.variable.value}\``,
-        );
-      }
-      if (ev.oldValue !== undefined) {
-        lines.push(`old value: \`${safeStringify(ev.oldValue)}\``);
-      }
-      break;
-    }
     case "expr":
-    case "expression":
-      if (ev.value !== undefined) {
-        lines.push(`value: \`${safeStringify(ev.value)}\``);
-      }
+      lines.push(`value: \`${safeStringify(ev.val)}\``);
       break;
     case "call":
       lines.push(`callee: \`${ev.callee}\``);
@@ -189,8 +111,8 @@ export function formatEventMarkdown(ev: TraceEvent): string {
       }
       break;
     case "enter":
-      lines.push(`function: \`${ev.function_name}\``);
-      if (ev.args?.length) {
+      lines.push(`function: \`${ev.fn_name}\``);
+      if (ev.args.length !== 0) {
         lines.push("args:");
         for (const a of ev.args) {
           lines.push(`- \`${a.name}: ${a.type} = ${a.value}\``);
@@ -198,30 +120,14 @@ export function formatEventMarkdown(ev: TraceEvent): string {
       }
       break;
     case "exit":
-      lines.push(`return value: \`${safeStringify(ev.returnVal)}\``);
-      break;
-    case "return":
-      lines.push(`value: \`${safeStringify(ev.value)}\``);
+      if ("return_val" in ev)
+        lines.push(`return value: \`${safeStringify(ev.return_val)}\``);
       break;
     case "throw":
       lines.push(`error: \`${safeStringify(ev.error)}\``);
       break;
     case "if": {
-      const val = String(ev.value);
-      const isTruthy = val !== "false" && val !== "0" && val !== "" && val !== "null" && val !== "undefined" && val !== "NaN";
-      lines.push(
-        `\`${val}\` → **${isTruthy ? "then" : "else"}**`,
-      );
-      break;
-    }
-    case "if_branch": {
-      const branchName =
-        ev.branch === "then"
-          ? "then"
-          : ev.branch === "else_if"
-            ? `else if (#${ev.branchIndex})`
-            : `else (#${ev.branchIndex})`;
-      lines.push(`taken: **${branchName}**`);
+      lines.push(`\`if → **${ev.isTruthy ? "then" : "else"}**`);
       break;
     }
     default: {

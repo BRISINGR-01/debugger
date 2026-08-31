@@ -3,55 +3,56 @@ import * as path from "path";
 import { TraceModel } from "./model";
 import { DecorationManager } from "./decorations";
 import { TimelineProvider } from "./timelineProvider";
-import {
-  annotationPosition,
-  formatEventMarkdown,
-  formatEventValue,
-} from "./format";
-import { TraceEvent } from "./types";
+import { formatEventMarkdown, formatEventValue } from "./format";
 import Debugger from "debugger";
-import { LogEvent } from "./json-spec";
-import { getRoot } from "./utils";
+import { Id, LogEvent } from "./json-spec";
+import { getFile, getRoot, vsRange } from "./utils";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const model = new TraceModel();
   const root = getRoot();
-
   if (!root) throw new Error("No root dir was found");
+
+  const model = new TraceModel(root);
 
   const dbg = new Debugger({
     command: "node main.js",
-    path: root,
+    srcRoot: root,
+    disable: false,
+    excludePattern: [],
+    httpPort: 5634,
+    ioFilePath: undefined,
+    shouldRestart: true,
+    shouldWatch: true,
   });
   dbg.on("clear", () => {
     model.clear();
     refreshAll();
   });
   dbg.on("data", (d: LogEvent) => {
-    model.addEvent(d);
+    model.events.addEvent(d);
     refreshAll();
     if (
       model.currentIndex === -1 ||
-      model.currentIndex === model.events.length - 2
+      model.currentIndex === model.events.events.length - 2
     ) {
       model.jumpToEnd();
     }
   });
   dbg.on("ready", () => {
     setHasTrace(model.loaded);
-    if (model.parseErrors.length > 0) {
+    if (model.events.parseErrors.length > 0) {
       vscode.window.showWarningMessage(
-        `Trace Viewer: loaded ${model.events.length} event(s), but ${model.parseErrors.length} chunk(s) failed to parse. See the "Trace Viewer" output for details.`,
+        `Trace Viewer: loaded ${model.events.events.length} event(s), but ${model.events.parseErrors.length} chunk(s) failed to parse. See the "Trace Viewer" output for details.`,
       );
       const out = vscode.window.createOutputChannel("Trace Viewer");
-      for (const err of model.parseErrors) {
+      for (const err of model.events.parseErrors) {
         out.appendLine(`--- parse error: ${err.message} ---`);
         out.appendLine("");
       }
       out.show(true);
     } else {
       vscode.window.showInformationMessage(
-        `Trace Viewer: loaded ${model.events.length} event(s).`,
+        `Trace Viewer: loaded ${model.events.events.length} event(s).`,
       );
     }
   });
@@ -90,10 +91,12 @@ export function activate(context: vscode.ExtensionContext): void {
   function updateStatusBar() {
     if (!model.loaded) return statusBar.hide();
 
-    const total = model.events.length;
+    const total = model.events.events.length;
     const pos = model.currentIndex + 1; // 1-based for display; 0 means "before start"
     const current =
-      model.currentIndex >= 0 ? model.events[model.currentIndex] : undefined;
+      model.currentIndex >= 0
+        ? model.events.get(model.currentIndex)
+        : undefined;
     const t = current ? ` t=${current.time}` : "";
     statusBar.text = `$(pulse) Trace ${pos}/${total}${t}`;
     statusBar.tooltip = "Click to jump to a specific trace event";
@@ -148,16 +151,15 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!model.loaded) return;
 
       const items: (vscode.QuickPickItem & { index: number })[] =
-        model.events.map((ev: TraceEvent, i: number) => ({
+        model.events.events.map((ev: LogEvent, i: number) => ({
           index: i,
           label: `${ev.time.toFixed(3)}  ${ev.event}`,
-          description:
-            typeof ev.loc === "string" ? ev.loc : (ev.loc?.start ?? undefined),
+          description: `${ev.loc.start.line}:${ev.loc.start.col}`,
           detail:
-            ev.event === "declare" && ev.variable
-              ? `${ev.variable.name} = ${ev.variable.value}`
+            ev.event === "declare" && ev.var
+              ? `${ev.var.name} = ${ev.var.value}`
               : ev.event === "enter"
-                ? ev.function_name
+                ? ev.fn_name
                 : ev.event === "call"
                   ? ev.callee
                   : undefined,
@@ -181,10 +183,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand(
       "traceViewer.jumpToEndOfFn",
-      async (index?: number) => {
+      async (id?: Id) => {
         if (!model.loaded) return;
-        if (index) {
-          const exit = model.findExitForEnter(index);
+        if (id) {
+          const exit = model.events.findExitIdx(id);
           if (exit) {
             model.jumpTo(exit);
             refreshAll();
@@ -193,62 +195,63 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        // Step 1: collect unique function names from enter events
-        const fnEntries = new Map<
-          string,
-          { index: number; time: number; loc?: string }[]
-        >();
-        for (let i = 0; i < model.events.length; i++) {
-          const ev = model.events[i];
-          if (ev.event !== "enter") continue;
-          if (model.findExitForEnter(i) === undefined) continue;
-          const name = ev.function_name ?? "(anonymous)";
-          let list = fnEntries.get(name);
-          if (!list) {
-            list = [];
-            fnEntries.set(name, list);
-          }
-          const loc = model.locations[i];
-          list.push({
-            index: i,
-            time: ev.time,
-            loc: loc ? `${path.basename(loc.file)}:${loc.line + 1}` : undefined,
-          });
-        }
-        if (fnEntries.size === 0) return;
+        return;
 
-        // Step 1 quick pick: choose a function name
-        const fnItems: (vscode.QuickPickItem & { name: string })[] = [
-          ...fnEntries.entries(),
-        ].map(([name, calls]) => ({
-          name,
-          label: name,
-          description: `${calls.length} call${calls.length === 1 ? "" : "s"}`,
-        }));
-        const fnPicked = await vscode.window.showQuickPick(fnItems, {
-          placeHolder: "Choose a function",
-          matchOnDescription: true,
-        });
-        if (!fnPicked) return;
+        //   // Step 1: collect unique function names from enter events
+        //   const fnEntries = new Map<
+        //     string,
+        //     { index: number; time: number; loc?: string }[]
+        //   >();
+        //   for (let i = 0; i < model.events.events.length; i++) {
+        //     const ev = model.events.get(i);
+        //     if (ev.event !== "enter") continue;
+        //     if (model.findExitForEnter(i) === undefined) continue;
+        //     const name = ev.fn_name ?? "(anonymous)";
+        //     let list = fnEntries.get(name);
+        //     if (!list) {
+        //       list = [];
+        //       fnEntries.set(name, list);
+        //     }
+        //     list.push({
+        //       index: i,
+        //       time: ev.time,
+        //       loc: `${path.basename(getFile(ev))}:${ev.loc.start.line}`,
+        //     });
+        //   }
+        //   if (fnEntries.size === 0) return;
 
-        // Step 2: show all enter events for that function
-        const calls = fnEntries.get(fnPicked.name)!;
-        const callItems: (vscode.QuickPickItem & { index: number })[] =
-          calls.map((c) => ({
-            index: c.index,
-            label: `${c.time.toFixed(3)}  ${fnPicked.name}`,
-            description: c.loc,
-          }));
-        const callPicked = await vscode.window.showQuickPick(callItems, {
-          placeHolder: `Choose a ${fnPicked.name}() entry to jump to its return`,
-          matchOnDescription: true,
-        });
-        if (!callPicked) return;
+        //   // Step 1 quick pick: choose a function name
+        //   const fnItems: (vscode.QuickPickItem & { name: string })[] = [
+        //     ...fnEntries.entries(),
+        //   ].map(([name, calls]) => ({
+        //     name,
+        //     label: name,
+        //     description: `${calls.length} call${calls.length === 1 ? "" : "s"}`,
+        //   }));
+        //   const fnPicked = await vscode.window.showQuickPick(fnItems, {
+        //     placeHolder: "Choose a function",
+        //     matchOnDescription: true,
+        //   });
+        //   if (!fnPicked) return;
 
-        const exitIdx = model.findExitForEnter(callPicked.index)!;
-        model.jumpTo(exitIdx);
-        refreshAll();
-        revealCurrent(model);
+        //   // Step 2: show all enter events for that function
+        //   const calls = fnEntries.get(fnPicked.name)!;
+        //   const callItems: (vscode.QuickPickItem & { index: number })[] =
+        //     calls.map((c) => ({
+        //       index: c.index,
+        //       label: `${c.time.toFixed(3)}  ${fnPicked.name}`,
+        //       description: c.loc,
+        //     }));
+        //   const callPicked = await vscode.window.showQuickPick(callItems, {
+        //     placeHolder: `Choose a ${fnPicked.name}() entry to jump to its return`,
+        //     matchOnDescription: true,
+        //   });
+        //   if (!callPicked) return;
+
+        //   const exitIdx = model.events.findExitIdx(callPicked.index)!;
+        //   model.jumpTo(exitIdx);
+        //   refreshAll();
+        //   revealCurrent(model);
       },
     ),
 
@@ -276,12 +279,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.languages.registerHoverProvider("*", {
       provideHover(document, position) {
-        if (!model.loaded) {
-          return undefined;
-        }
+        if (!model.loaded) return undefined;
+
         const filePath = document.uri.fsPath;
-        const history = model.getLineHistory(filePath, position.line);
-        if (history.length === 0) return;
+        const lineEvents = model.getLineHistory(filePath, position.line);
+        if (lineEvents.length === 0) return;
 
         const covering = model.getEventsAt(
           filePath,
@@ -289,18 +291,16 @@ export function activate(context: vscode.ExtensionContext): void {
           position.character,
         );
         if (covering.length > 0) {
-          const idx = bestCoveringEvent(model, covering);
-          const range = hoverRangeOf(model, document, idx);
-          const snippetRange = rangeOf(model, document, idx);
+          const hoveredEv = bestCoveringEvent(model, covering);
+          const range = vsRange(hoveredEv);
           const md = new vscode.MarkdownString();
           md.isTrusted = true;
-          if (snippetRange) {
-            md.appendMarkdown(
-              "```\n" + document.getText(snippetRange) + "\n```\n\n",
-            );
-          }
-          md.appendMarkdown(`### ${formatEventMarkdown(model.events[idx])}\n`);
-          const others = history.filter((i: number) => i !== idx).length;
+          md.appendMarkdown("```\n" + document.getText(range) + "\n```\n\n");
+
+          md.appendMarkdown(`### ${formatEventMarkdown(hoveredEv)}\n`);
+          const others = lineEvents.filter(
+            (ev: LogEvent) => ev !== hoveredEv,
+          ).length;
           if (others > 0) {
             md.appendMarkdown(
               `\n_…plus ${others} other event${others === 1 ? "" : "s"} on this line._`,
@@ -308,21 +308,18 @@ export function activate(context: vscode.ExtensionContext): void {
           }
 
           // For enter events, show all calls to the same function
-          const ev = model.events[idx];
-          if (ev.event === "enter" && ev.function_name) {
-            const calls = model.findEntersForFn(ev.function_name);
+          if (hoveredEv.event === "enter") {
+            const calls = model.events.findEntersForFn(hoveredEv);
             if (calls.length > 1) {
               md.appendMarkdown(
-                `\n\n---\n\n**${calls.length} calls to \`${ev.function_name}\`**\n\n`,
+                `\n\n---\n\n**${calls.length} calls to \`${hoveredEv.fn_name}\`**\n\n`,
               );
               for (const ci of calls.slice(0, 20)) {
-                const loc = model.locations[ci];
-                const marker = ci === idx ? "**→** " : "";
-                const locStr = loc
-                  ? ` ${path.basename(loc.file)}:${loc.line + 1}`
-                  : "";
+                const marker = ci === hoveredEv ? "**→** " : "";
+                const locStr = ` ${path.basename(getFile(ci))}:${ci.loc.start.line}`;
+
                 md.appendMarkdown(
-                  `${marker}[t=${model.events[ci].time.toFixed(3)}${locStr} ${model.events[ci].args && `args: {${model.events[ci].args.map((a) => `${a.name}:${a.type} = ${a.value}}`).join(", ")}`}](command:traceViewer.jumpToEndOfFn?${ci})\n\n`,
+                  `${marker}[t=${ci.time.toFixed(3)}${locStr} ${ci.args.length !== 0 && `args: {${ci.args.map((a) => `${a.name}:${a.type} = ${a.value}}`).join(", ")}`}](command:traceViewer.jumpToEndOfFn?${ci.ctx_id})\n\n`,
                 );
               }
               if (calls.length > 20) {
@@ -337,13 +334,14 @@ export function activate(context: vscode.ExtensionContext): void {
         const md = new vscode.MarkdownString();
         md.isTrusted = false;
         md.appendMarkdown(
-          `### Trace events on this line (${history.length})\n\n`,
+          `### Trace events on this line (${lineEvents.length})\n\n`,
         );
-        for (const idx of history.slice(0, 15)) {
-          const marker = idx === model.currentIndex ? "**▶ current —** " : "";
-          md.appendMarkdown(
-            marker + formatEventMarkdown(model.events[idx]) + "\n\n---\n\n",
-          );
+        for (const ev of lineEvents.slice(0, 15)) {
+          const marker =
+            ev === model.events.get(model.currentIndex)
+              ? "**▶ current —** "
+              : "";
+          md.appendMarkdown(marker + formatEventMarkdown(ev) + "\n\n---\n\n");
         }
         return new vscode.Hover(md);
       },
@@ -361,92 +359,38 @@ export function activate(context: vscode.ExtensionContext): void {
  * Among the events covering the cursor, pick the most relevant: the innermost
  * (smallest) range, breaking ties toward the current trace position.
  */
-function bestCoveringEvent(model: TraceModel, covering: number[]): number {
-  const area = (i: number) => {
-    const loc = model.locations[i];
-    if (!loc) return Number.POSITIVE_INFINITY;
-    return (loc.endLine - loc.line) * 100000 + (loc.endColumn - loc.column);
+function bestCoveringEvent(model: TraceModel, covering: LogEvent[]): LogEvent {
+  const area = (ev: LogEvent) => {
+    return (
+      (ev.loc.end.line - ev.loc.start.line) * 100000 +
+      (ev.loc.end.col - ev.loc.start.col)
+    );
   };
   let best = covering[0];
-  for (const i of covering) {
-    const a = area(i);
+  for (const ev of covering) {
+    const a = area(ev);
     const b = area(best);
-    if (a < b || (a === b && i === model.currentIndex)) {
-      best = i;
+    if (a < b || (a === b && ev === model.events.get(model.currentIndex))) {
+      best = ev;
     }
   }
   return best;
 }
 
-/** Clamped editor range for an event's recorded location, or undefined. */
-function rangeOf(
-  model: TraceModel,
-  document: vscode.TextDocument,
-  idx: number,
-): vscode.Range | undefined {
-  const loc = model.locations[idx];
-  if (!loc) return undefined;
-  if (loc.line < 0 || loc.line >= document.lineCount) return undefined;
-
-  const startChar = Math.min(loc.column, document.lineAt(loc.line).text.length);
-  if (loc.endLine === loc.line) {
-    const endChar = Math.min(
-      loc.endColumn,
-      document.lineAt(loc.line).text.length,
-    );
-    return new vscode.Range(loc.line, startChar, loc.line, endChar);
-  }
-  const endLine = Math.min(loc.endLine, document.lineCount - 1);
-  const endChar = Math.min(loc.endColumn, document.lineAt(endLine).text.length);
-  return new vscode.Range(loc.line, startChar, endLine, endChar);
-}
-
-/**
- * The editor range to highlight for an event: its recorded location, extended
- * to also cover the inline `(value)` annotation rendered after it when that
- * annotation sits beyond the recorded end (e.g. a read `a` highlights as
- * `a(5)`, a whole-expression `a + b` as `a(5) + b(10)`). When the annotation
- * already falls inside the recorded range (an assignment like `c(15) = a + b`),
- * the recorded range is highlighted as-is so the hint is naturally included.
- */
-function hoverRangeOf(
-  model: TraceModel,
-  document: vscode.TextDocument,
-  idx: number,
-): vscode.Range | undefined {
-  const loc = model.locations[idx];
-  const base = rangeOf(model, document, idx);
-  if (!loc || !base) return undefined;
-
-  const value = formatEventValue(model.events[idx]);
-  if (!value) return base;
-
-  const startLine = Math.min(Math.max(loc.line, 0), document.lineCount - 1);
-  const pos = annotationPosition(
-    model.events[idx],
-    loc,
-    document.lineAt(startLine).text,
-  );
-  const posLine = Math.min(Math.max(pos.line, 0), document.lineCount - 1);
-  const annotationEnd = new vscode.Position(
-    posLine,
-    pos.character + value.length + 2,
-  );
-  if (!annotationEnd.isAfter(base.end)) return base;
-  return new vscode.Range(base.start, annotationEnd);
-}
-
 function revealCurrent(model: TraceModel): void {
   if (model.currentIndex < 0) return;
 
-  const loc = model.locations[model.currentIndex];
-  if (!loc) return;
+  const ev = model.events.get(model.currentIndex);
 
-  const pos = new vscode.Position(loc.line, Math.max(0, loc.column));
+  const pos = new vscode.Position(
+    ev.loc.start.line,
+    Math.max(0, ev.loc.start.col),
+  );
   const root = getRoot();
+  const file = path.join(root, getFile(ev));
 
   const active = vscode.window.activeTextEditor;
-  if (active && active.document.uri.fsPath === path.join(root, loc.file)) {
+  if (active && active.document.uri.fsPath === file) {
     active.selection = new vscode.Selection(pos, pos);
     active.revealRange(
       new vscode.Range(pos, pos),
@@ -455,7 +399,7 @@ function revealCurrent(model: TraceModel): void {
     return;
   }
 
-  const uri = vscode.Uri.file(loc.file);
+  const uri = vscode.Uri.file(file);
   vscode.workspace.openTextDocument(uri).then(
     (doc) => {
       vscode.window
