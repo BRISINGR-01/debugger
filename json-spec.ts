@@ -22,6 +22,10 @@ export type Var = {
   val: string;
 };
 
+export type Arg = Var & {
+  loc: Loc;
+};
+
 export type CallEvent = Event & {
   event: "call";
   value: string;
@@ -31,7 +35,7 @@ export type CallEvent = Event & {
 export type EnterEvent = Event & {
   event: "enter";
   fn_name: string;
-  args: ({ loc: Loc } & Var)[];
+  args: Arg[];
 };
 
 export type ExitEvent = Event & {

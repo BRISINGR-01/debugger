@@ -59,21 +59,26 @@ void InstrumentVisitor::walkForReturns(Stmt *S, FunctionDecl *FD, const std::str
         walkForReturns(child, FD, fname);
     }
 }
-
 void InstrumentVisitor::instrumentReturn(ReturnStmt *RS, FunctionDecl *FD,
                                          const std::string &fname)
 {
-    SourceLocation start = RS->getBeginLoc();
-    if (start.isInvalid() || SM.isInSystemHeader(start))
+    Expr *RetExpr = RS->getRetValue();
+    if (!RetExpr)
+    {
+        // e.g. `return;`
+        std::optional<Loc> loc = getLoc(RS->getBeginLoc(), RS->getEndLoc(), SM);
+        if (!loc.has_value())
+            return;
+
+        RW.InsertTextBefore(RS->getBeginLoc(), construct_func_exit_ev(*loc));
         return;
-    SourceLocation end = RS->getEndLoc();
-    if (end.isInvalid() || SM.isInSystemHeader(end))
-        return;
-    std::optional<Loc> location = getLoc(start, end, SM);
-    if (!location.has_value())
+    }
+
+    std::optional<Loc> loc = getLoc(RetExpr->getBeginLoc(), Lexer::getLocForEndOfToken(RetExpr->getEndLoc(), 0, SM, LO), SM);
+    if (!loc.has_value())
         return;
 
-    RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return_ev(*location, RS, SM, LO));
+    RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return_ev(*loc, RS, SM, LO));
 }
 
 // Ensure a statement body is wrapped in braces (for braceless if/loop bodies).

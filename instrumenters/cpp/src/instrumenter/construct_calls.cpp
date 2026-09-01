@@ -30,8 +30,8 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const Source
             continue;
         std::string name = P->getNameAsString();
         std::string type = typeStr(P->getType(), LO);
-        auto range = P->getSourceRange();
-        auto loc = getLoc(range.getBegin(), range.getEnd(), SM);
+
+        auto loc = getLoc(P->getBeginLoc(), Lexer::getLocForEndOfToken(P->getEndLoc(), 0, SM, LO), SM);
         if (!loc.has_value())
             continue;
 

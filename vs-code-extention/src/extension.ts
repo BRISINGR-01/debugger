@@ -274,7 +274,7 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         if (covering.length > 0) {
           const hoveredEv = bestCoveringEvent(model, covering);
-          const range = vsRange(hoveredEv);
+          const range = vsRange(hoveredEv.loc);
           const md = new vscode.MarkdownString();
           md.isTrusted = true;
           md.appendMarkdown("```\n" + document.getText(range) + "\n```\n\n");

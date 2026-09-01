@@ -83,7 +83,7 @@ inline void __func_enter(const std::string ctx, const std::string func_name, con
             args_str = '[';
         }
 
-        args_str += '{' + __dbg_fmt_val(args[i].name, args[i].type, args[i].value) + "," + __dbg_fmt_loc(args->startLine, args->startCol, args->endLine, args->endCol) + "},";
+        args_str += '{' + __dbg_fmt_val(args[i].name, args[i].type, args[i].value) + "," + __dbg_fmt_loc(args[i].startLine, args[i].startCol, args[i].endLine, args[i].endCol) + "},";
 
         if (i == args_count - 1)
         {
@@ -98,7 +98,7 @@ inline void __func_enter(const std::string ctx, const std::string func_name, con
 
 inline void __func_exit(const std::string ctx)
 {
-    __dbg_emit('{' + ctx + ',' + __DBG_JF("return_val", "null") + '}');
+    __dbg_emit('{' + ctx + '}');
 }
 inline void __func_return(const std::string ctx, std::string type, std::string returnVal)
 {

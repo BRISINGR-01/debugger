@@ -5,7 +5,7 @@ import {
   formatEventMarkdown,
   formatArgValue,
 } from "./format";
-import { Loc, LogEvent } from "./json-spec";
+import { Arg, Loc, LogEvent } from "./json-spec";
 import { vsRange } from "./utils";
 
 export class DecorationManager {
@@ -113,6 +113,7 @@ export class DecorationManager {
     const document = editor.document;
     // annotation position ("line:col") -> best event index to annotate there
     const best = new Map<string, LogEvent>();
+    const argBest = new Map<string, Arg>();
     const throwOptions: vscode.DecorationOptions[] = [];
     const ifTrueOptions: vscode.DecorationOptions[] = [];
     const ifFalseOptions: vscode.DecorationOptions[] = [];
@@ -135,7 +136,7 @@ export class DecorationManager {
           break;
         case "if":
           {
-            const range = vsRange(ev);
+            const range = vsRange(ev.loc);
             const md = new vscode.MarkdownString();
             md.isTrusted = false;
             md.appendMarkdown(`**if** → **${ev.isTruthy ? "then" : "else"}**`);
@@ -148,40 +149,44 @@ export class DecorationManager {
           break;
         case "enter":
           for (const arg of ev.args) {
-            const line = arg.loc.start.line;
-            const col = arg.loc.start.col;
-
-            const lineText = document.lineAt(line).text;
-            const clampedChar = Math.min(col, lineText.length);
-
-            const text = formatArgValue(arg.val);
-            const md = new vscode.MarkdownString();
-            md.isTrusted = false;
-            md.appendMarkdown(
-              `**${arg.name}**: \`${arg.type}\` = \`${arg.val}\``,
-            );
-            options.push({
-              range: new vscode.Range(line, clampedChar, line, clampedChar),
-              renderOptions: { after: { contentText: `(${text})` } },
-              hoverMessage: md,
-            });
+            const key = `${arg.loc.start.line}:${arg.loc.start.col}`;
+            const prev = argBest.get(key);
+            if (!prev) argBest.set(key, arg);
           }
           break;
+
         default:
+          if (!formatEventValue(ev)) continue;
+
+          const pos = this.annotationPosition(document, ev, ev.loc);
+          if (!pos) continue;
+          if (pos.line < 0 || pos.line >= document.lineCount) continue;
+
+          const key = `${pos.line}:${pos.character}`;
+          const prev = best.get(key);
+          if (!prev || better(ev, prev)) {
+            best.set(key, ev);
+          }
           break;
       }
+    }
 
-      if (!formatEventValue(ev)) continue;
+    for (const arg of argBest.values()) {
+      const text = formatArgValue(arg.val);
+      const md = new vscode.MarkdownString();
+      md.isTrusted = false;
+      md.appendMarkdown(`**${arg.name}**: \`${arg.type}\` = \`${arg.val}\``);
 
-      const pos = this.annotationPosition(document, ev, ev.loc);
-      if (!pos) continue;
-      if (pos.line < 0 || pos.line >= document.lineCount) continue;
-
-      const key = `${pos.line}:${pos.character}`;
-      const prev = best.get(key);
-      if (!prev || better(ev, prev)) {
-        best.set(key, ev);
-      }
+      const loc = structuredClone(arg.loc);
+      loc.start.line -= 1;
+      loc.start.col -= 1;
+      loc.end.line -= 1;
+      loc.end.col -= 1;
+      options.push({
+        range: vsRange(loc),
+        renderOptions: { after: { contentText: `(${text})` } },
+        hoverMessage: md,
+      });
     }
 
     for (const ev of best.values()) {

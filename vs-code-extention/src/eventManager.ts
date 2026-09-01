@@ -34,7 +34,9 @@ export default class EventManager {
       return;
     }
 
-    if (!isValid(event)) return;
+    if (!isValid(event)) {
+      return;
+    }
 
     let ctxArr = this.byCtx.get(event.ctx_id);
     if (!ctxArr) {
