@@ -3,24 +3,25 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import type { LogEvent } from "../../../json-spec.ts";
 import { Server } from "http";
-import type Sink from "./sink.ts";
 import { type Config } from "../config.ts";
+import EventsContainer from "./eventsContainer.ts";
+import type Sink from "./sink.ts";
 
 export default class HTTPServer extends EventEmitter implements Sink {
   private wss: WebSocketServer | null = null;
   private server: Server | null = null;
   private port: number = -1;
-  data: LogEvent[];
+  events: EventsContainer;
 
-  constructor(data: LogEvent[], config: Config) {
+  constructor(events: EventsContainer, config: Config) {
     super();
-    this.data = data;
     this.port = config.httpPort;
+    this.events = events;
   }
 
   broadcast(logString: string) {
     const parsed = JSON.parse(logString);
-    this.data.push(parsed);
+    this.events.add(parsed);
     this.emit("data", parsed);
 
     for (const client of this.wss?.clients ?? []) {
@@ -29,7 +30,7 @@ export default class HTTPServer extends EventEmitter implements Sink {
   }
 
   async clear() {
-    this.data.length = 0;
+    this.events.clear();
     this.emit("clear");
     for (const client of this.wss?.clients ?? []) {
       if (client.readyState === 1) client.send("clear");
@@ -45,8 +46,8 @@ export default class HTTPServer extends EventEmitter implements Sink {
 
     this.wss.on("connection", (ws) => {
       if (ws.readyState !== 1) return;
-      for (const d of this.data) {
-        ws.send(d as unknown as Buffer);
+      for (const d of this.events.data) {
+        ws.send(JSON.stringify(d));
       }
     });
   }

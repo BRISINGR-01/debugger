@@ -4,22 +4,23 @@ import fs, { Stats } from "fs";
 import type Sink from "./sink.ts";
 import { type Config } from "../config.ts";
 import type { LogEvent } from "../../../json-spec.ts";
+import EventsContainer from "./eventsContainer.ts";
 
 export default class File extends EventEmitter implements Sink {
-  data: LogEvent[];
   path: string;
   watcher: FSWatcher;
   offset = 0;
   paused = false;
-  url: URL;
+  stream?: fs.ReadStream;
+  events: EventsContainer;
+  leftOver: string = "";
 
-  constructor(data: LogEvent[], config: Config) {
+  constructor(events: EventsContainer, config: Config) {
     super();
 
-    this.data = data;
+    this.events = events;
     this.path = config.ioFilePath!;
     this.watcher = chokidar.watch(this.path);
-    this.url = new URL(`http://localhost:${config.httpPort}`);
   }
 
   async start() {
@@ -36,32 +37,37 @@ export default class File extends EventEmitter implements Sink {
     if (stat.size < this.offset) return this.clear();
     if (stat.size === this.offset) return;
 
-    const stream = fs.createReadStream(this.path, {
+    if (this.stream) this.stream.destroy();
+
+    this.stream = fs.createReadStream(this.path, {
       start: this.offset,
       end: stat.size - 1,
     });
 
-    let bytesRead = 0;
+    this.stream.on("data", (chunk: Buffer) => {
+      this.offset += chunk.byteLength;
 
-    stream.on("data", (chunk: Buffer) => {
-      bytesRead += chunk.length;
+      const data = (this.leftOver + chunk.toString()).split("\n");
+      this.leftOver = "";
+      for (let i = 0; i < data.length; i++) {
+        if (i === data.length - 1 && !data[i].endsWith("\n")) {
+          this.leftOver = data[i];
+          continue;
+        }
 
-      chunk.forEach((b) => this.send(b.toString()));
+        this.send(data[i]);
+      }
     });
 
-    stream.on("end", () => (this.offset += bytesRead));
-    stream.on("error", console.error);
+    this.stream.on("error", (err) => this.emit("error", err));
   }
 
-  async send(ev: string) {
-    fetch(`${this.url}/log`, {
-      method: "POST",
-      body: JSON.stringify(ev),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-    });
+  private send(str: string) {
+    try {
+      this.emit("data", JSON.parse(str));
+    } catch (err) {
+      this.emit("error", err);
+    }
   }
 
   async stop(): Promise<void> {
@@ -75,6 +81,5 @@ export default class File extends EventEmitter implements Sink {
 
     this.emit("clear");
     this.offset = 0;
-    this.data.length = 0;
   }
 }

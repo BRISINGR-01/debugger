@@ -3,27 +3,31 @@ import * as path from "path";
 import { TraceModel } from "./model";
 import { DecorationManager } from "./decorations";
 import { TimelineProvider } from "./timelineProvider";
-import { formatEventMarkdown, formatEventValue } from "./format";
-import Debugger from "debugger";
-import { Id, LogEvent } from "./json-spec";
+import { formatEventMarkdown } from "./format";
+import { Debugger, EventsContainer } from "debugger";
+import { EnterEvent, Id, LogEvent } from "./json-spec";
 import { getFile, getRoot, vsRange } from "./utils";
 
 export function activate(context: vscode.ExtensionContext): void {
   const root = getRoot();
   if (!root) throw new Error("No root dir was found");
+  const events = new EventsContainer();
 
-  const model = new TraceModel(root);
+  const model = new TraceModel(root, events);
 
-  const dbg = new Debugger({
-    command: "node main.js",
-    srcRoot: root,
-    disable: false,
-    excludePattern: [],
-    httpPort: 5634,
-    ioFilePath: undefined,
-    shouldRestart: true,
-    shouldWatch: true,
-  });
+  const dbg = new Debugger(
+    {
+      command: "./build/app",
+      srcRoot: root,
+      disable: false,
+      excludePattern: [],
+      httpPort: 5634,
+      ioFilePath: undefined,
+      shouldRestart: true,
+      shouldWatch: true,
+    },
+    events,
+  );
   dbg.on("clear", () => {
     model.clear();
     refreshAll();
@@ -33,28 +37,13 @@ export function activate(context: vscode.ExtensionContext): void {
     refreshAll();
     if (
       model.currentIndex === -1 ||
-      model.currentIndex === model.events.events.length - 2
+      model.currentIndex === model.events.count - 2
     ) {
       model.jumpToEnd();
     }
   });
-  dbg.on("ready", () => {
-    setHasTrace(model.loaded);
-    if (model.events.parseErrors.length > 0) {
-      vscode.window.showWarningMessage(
-        `Trace Viewer: loaded ${model.events.events.length} event(s), but ${model.events.parseErrors.length} chunk(s) failed to parse. See the "Trace Viewer" output for details.`,
-      );
-      const out = vscode.window.createOutputChannel("Trace Viewer");
-      for (const err of model.events.parseErrors) {
-        out.appendLine(`--- parse error: ${err.message} ---`);
-        out.appendLine("");
-      }
-      out.show(true);
-    } else {
-      vscode.window.showInformationMessage(
-        `Trace Viewer: loaded ${model.events.events.length} event(s).`,
-      );
-    }
+  dbg.on("error", (e) => {
+    console.error(e);
   });
 
   dbg.start().then(() => setHasTrace(model.loaded));
@@ -91,7 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
   function updateStatusBar() {
     if (!model.loaded) return statusBar.hide();
 
-    const total = model.events.events.length;
+    const total = model.events.count;
     const pos = model.currentIndex + 1; // 1-based for display; 0 means "before start"
     const current =
       model.currentIndex >= 0
@@ -150,19 +139,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("traceViewer.pickTime", async () => {
       if (!model.loaded) return;
 
-      const items: (vscode.QuickPickItem & { index: number })[] =
-        model.events.events.map((ev: LogEvent, i: number) => ({
+      const items: (vscode.QuickPickItem & { index: number })[] = model.events
+        .getEnters()
+        .map((ev: EnterEvent, i: number) => ({
           index: i,
-          label: `${ev.time.toFixed(3)}  ${ev.event}`,
+          label: `${ev.time.toFixed(3)} ${ev.fn_name}`,
           description: `${ev.loc.start.line}:${ev.loc.start.col}`,
-          detail:
-            ev.event === "declare" && ev.var
-              ? `${ev.var.name} = ${ev.var.value}`
-              : ev.event === "enter"
-                ? ev.fn_name
-                : ev.event === "call"
-                  ? ev.callee
-                  : undefined,
         }));
       const picked = await vscode.window.showQuickPick(items, {
         placeHolder: "Jump to trace event",
@@ -202,7 +184,7 @@ export function activate(context: vscode.ExtensionContext): void {
         //     string,
         //     { index: number; time: number; loc?: string }[]
         //   >();
-        //   for (let i = 0; i < model.events.events.length; i++) {
+        //   for (let i = 0; i < model.events.count; i++) {
         //     const ev = model.events.get(i);
         //     if (ev.event !== "enter") continue;
         //     if (model.findExitForEnter(i) === undefined) continue;
@@ -319,7 +301,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 const locStr = ` ${path.basename(getFile(ci))}:${ci.loc.start.line}`;
 
                 md.appendMarkdown(
-                  `${marker}[t=${ci.time.toFixed(3)}${locStr} ${ci.args.length !== 0 && `args: {${ci.args.map((a) => `${a.name}:${a.type} = ${a.value}}`).join(", ")}`}](command:traceViewer.jumpToEndOfFn?${ci.ctx_id})\n\n`,
+                  `${marker}[t=${ci.time.toFixed(3)}${locStr} ${ci.args.length !== 0 && `args: {${ci.args.map((a) => `${a.name}:${a.type} = ${a.val}}`).join(", ")}`}](command:traceViewer.jumpToEndOfFn?${ci.ctx_id})\n\n`,
                 );
               }
               if (calls.length > 20) {

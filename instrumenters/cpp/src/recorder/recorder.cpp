@@ -7,12 +7,16 @@ struct __dbg_Fn_arg
     std::string name;
     std::string type;
     std::string value;
+    int startLine;
+    int startCol;
+    int endLine;
+    int endCol;
 };
 #endif
 
 #ifdef __DBG_IMPL
 
-static std::string __dbg_gen_id(std::string file);
+static std::string __dbg_gen_id(std::string file, int line);
 
 inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string event,
                                        int16_t startLine, int16_t startCol, int16_t endLine, int16_t endCol);
@@ -38,10 +42,17 @@ void __dbg_emit(const std::string);
 #define __DBG_JF(n, v) '"' + n + "\":" + v                  // Json_Field
 #define __DBG(v) static_cast<std::string>(debug().noloc(), v)
 
-static std::string __dbg_gen_id(std::string file)
+static std::string __dbg_gen_id(std::string file, int line)
 {
     static int uid = 0;
-    return file + "@" + std::to_string(uid++);
+    return file + "@" + std::to_string(line) + ":" + std::to_string(uid++);
+}
+
+inline const std::string __dbg_fmt_loc(int16_t startLine, int16_t startCol, int16_t endLine, int16_t endCol)
+{
+    return std::string() + __DBG_JF("loc", '{' +
+                                               __DBG_JF("start", '{' + __DBG_JFN("line", startLine) + ',' + __DBG_JFN("col", startCol) + "},") +
+                                               __DBG_JF("end", '{' + __DBG_JFN("line", endLine) + ',' + __DBG_JFN("col", endCol) + "}}"));
 }
 
 inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string event,
@@ -54,9 +65,7 @@ inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string event,
            __DBG_JFS("ctx_id", ctxId) + ',' +
            __DBG_JFN("time", now.tv_usec) + ',' +
            __DBG_JFS("event", event) + ',' +
-           __DBG_JF("loc", '{' +
-                               __DBG_JF("start", '{' + __DBG_JFN("line", startLine) + ',' + __DBG_JFN("col", startCol) + "},") +
-                               __DBG_JF("end", '{' + __DBG_JFN("line", endLine) + ',' + __DBG_JFN("col", endCol) + "}}"));
+           __dbg_fmt_loc(startLine, startCol, endLine, endCol);
 }
 
 inline const std::string __dbg_fmt_val(const std::string name, const std::string type, const std::string value)
@@ -74,7 +83,7 @@ inline void __func_enter(const std::string ctx, const std::string func_name, con
             args_str = '[';
         }
 
-        args_str += '{' + __dbg_fmt_val(args[i].name, args[i].type, args[i].value) + "},";
+        args_str += '{' + __dbg_fmt_val(args[i].name, args[i].type, args[i].value) + "," + __dbg_fmt_loc(args->startLine, args->startCol, args->endLine, args->endCol) + "},";
 
         if (i == args_count - 1)
         {
@@ -101,11 +110,11 @@ inline void __var_decl(const std::string ctx, std::string name, std::string type
 }
 inline void __var_change(const std::string ctx, std::string name, std::string type, std::string val, std::string oldVal)
 {
-    __dbg_emit('{' + ctx + ',' + __DBG_JF("var", "{" + __dbg_fmt_val(name, type, val) + "}") + __DBG_JFS("old_val", oldVal) + '}');
+    __dbg_emit('{' + ctx + ',' + __DBG_JF("var", "{" + __dbg_fmt_val(name, type, val) + "},") + __DBG_JFS("old_val", oldVal) + '}');
 }
 inline void __expr(const std::string ctx, std::string type, std::string val)
 {
-    __dbg_emit('{' + ctx + ',' + __DBG_JFS("type", type) + __DBG_JFS("val", val) + '}');
+    __dbg_emit('{' + ctx + ',' + __DBG_JFS("type", type) + "," + __DBG_JFS("val", val) + '}');
 }
 
 #endif // __DBG_IMPL

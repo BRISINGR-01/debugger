@@ -18,7 +18,9 @@ export class TimelineProvider implements vscode.TreeDataProvider<number> {
     if (element !== undefined) {
       return [];
     }
-    return this.model.events.events.map((_, i: number) => i);
+    return Array.from<number>({ length: this.model.events.count }).map(
+      (_, i: number) => i,
+    );
   }
 
   getTreeItem(index: number): vscode.TreeItem {

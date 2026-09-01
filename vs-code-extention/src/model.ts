@@ -1,14 +1,20 @@
 import { LogEvent } from "./json-spec";
-import EventContainer from "./eventContainer";
+import EventManager from "./eventManager";
 import { getFile } from "./utils";
+import { EventsContainer } from "debugger";
 
 export class TraceModel {
-  events = new EventContainer();
+  events: EventManager;
 
   /** Current position in `events`. -1 means "before everything" (no trace loaded/at start). */
   currentIndex = -1;
 
-  constructor(public srcRoot: string) {}
+  constructor(
+    public srcRoot: string,
+    events: EventsContainer,
+  ) {
+    this.events = new EventManager(events, srcRoot);
+  }
 
   get loaded(): boolean {
     return this.events.hasEvents;
@@ -33,7 +39,7 @@ export class TraceModel {
   }
 
   stepForward(): boolean {
-    if (this.currentIndex < this.events.events.length - 1) {
+    if (this.currentIndex < this.events.count - 1) {
       this.currentIndex++;
       return true;
     }
@@ -55,13 +61,10 @@ export class TraceModel {
   }
 
   jumpToEnd(): void {
-    this.currentIndex = this.events.events.length - 1;
+    this.currentIndex = this.events.count - 1;
   }
 
   jumpTo(index: number): void {
-    this.currentIndex = Math.max(
-      -1,
-      Math.min(index, this.events.events.length - 1),
-    );
+    this.currentIndex = Math.max(-1, Math.min(index, this.events.count - 1));
   }
 }

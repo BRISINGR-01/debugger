@@ -23,7 +23,7 @@ program
   .option("-p, --path <directory>", "source directory to instrument")
   .option("-P, --port <number>", "server port", Number, 5634)
   .option("-n, --no-restart", "do not restart on file changes")
-  .option("-f, --file", "file to which to direct events")
+  .option("-f, --file <file>", "file to which to direct events", String)
   .option("-W, --no-watch", "no file watching")
   .allowExcessArguments(true)
   .parse(process.argv);

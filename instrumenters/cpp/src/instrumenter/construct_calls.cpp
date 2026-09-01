@@ -13,7 +13,7 @@ void addCtx(
        << loc.end.line << "," << loc.end.col << ")";
 }
 
-int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const LangOptions &LO)
+int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO)
 {
     int args_count = 0;
     for (const ParmVarDecl *P : FD->parameters())
@@ -30,7 +30,20 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const LangOp
             continue;
         std::string name = P->getNameAsString();
         std::string type = typeStr(P->getType(), LO);
-        os << "{\"" << escape(name) << "\",\"" << escape(type) << "\"," << to_dbg_str(name) << "},";
+        auto range = P->getSourceRange();
+        auto loc = getLoc(range.getBegin(), range.getEnd(), SM);
+        if (!loc.has_value())
+            continue;
+
+        os << "{\""
+           << escape(name) << "\",\""
+           << escape(type) << "\","
+           << to_dbg_str(name) << ","
+           << std::to_string(loc->start.line) << ","
+           << std::to_string(loc->start.col) << ","
+           << std::to_string(loc->end.line) << ","
+           << std::to_string(loc->end.col)
+           << "},";
     }
 
     os << "};\n";
@@ -38,14 +51,11 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const LangOp
     return args_count;
 }
 
-// int __func_enter(const std::string &file,
-//                  u_int16_t startLine, u_int16_t startCol, u_int16_t endLine, u_int16_t endCol,
-//                  const std::string &func, std::vector<Arg> args = {});
-const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const LangOptions &LO)
+const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO)
 {
     std::ostringstream os;
-    int args_count = construct_args(os, FD, LO);
-    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\");\n"
+    int args_count = construct_args(os, FD, SM, LO);
+    os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\", " + std::to_string(loc.start.line) + ");\n"
        << "__func_enter(";
     addCtx(os, "enter", loc);
     os << ", \"" << escape(func) << "\", __dbg_args, " << std::to_string(args_count) << ");\n";

@@ -12,6 +12,7 @@ import type { LogEvent } from "../../json-spec.ts";
 import type Sink from "./communication/sink.ts";
 import File from "./communication/file.ts";
 import StubSink from "./communication/stub.ts";
+import EventsContainer from "./communication/eventsContainer.ts";
 
 export default class Debugger extends EventEmitter {
   child?: ChildProcess;
@@ -19,19 +20,19 @@ export default class Debugger extends EventEmitter {
   restartTimer: NodeJS.Timeout | undefined;
   srcRoot: string;
   debugDir: string = "";
-  data: LogEvent[] = [];
+  data: EventsContainer;
 
   sink: Sink;
   config: Config;
 
-  constructor(options: Config & { srcRoot: string }) {
+  constructor(options: Config & { srcRoot: string }, data: EventsContainer) {
     super();
+    this.data = data;
     this.srcRoot = path.resolve(options.srcRoot ?? process.cwd());
     this.debugDir = options.disable
       ? this.srcRoot
       : path.resolve(this.srcRoot, debugDirName);
 
-    // this.sink = new HTTPServer(this.data);
     this.config = options.disable
       ? options
       : loadConfig(options, this.debugDir);
@@ -46,17 +47,20 @@ export default class Debugger extends EventEmitter {
     await this.sink.start();
     await this.sink.clear();
     this.sink.on("data", (data: LogEvent) => {
-      console.log(data);
+      this.data.add(data);
 
       if (isDev()) {
         fs.writeFileSync(
-          "/home/alex/Desktop/VSC/debugger/debugger/lib/dev-log.tson",
+          "/home/alex/Desktop/VSC/debugger/debugger/lib/dev-log.json",
           JSON.stringify(this.data),
         );
       }
       this.emit("data", data);
     });
-    this.sink.on("clear", () => this.emit("clear"));
+    this.sink.on("clear", () => {
+      this.emit("clear");
+      this.data.clear();
+    });
     this.sink.on("ready", () => this.emit("ready"));
 
     this.spawn();

@@ -19,7 +19,7 @@ export type Event = {
 export type Var = {
   name: string;
   type: string;
-  value: string;
+  val: string;
 };
 
 export type CallEvent = Event & {

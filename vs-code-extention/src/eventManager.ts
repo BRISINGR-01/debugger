@@ -1,19 +1,31 @@
-import { Id, InstError, LogEvent } from "./json-spec";
+import { EventsContainer } from "debugger";
+import { Id, InstError, Loc, LogEvent } from "./json-spec";
 import { getFile } from "./utils";
+import path from "node:path";
 
 /** Events in a specific file */
-export default class EventContainer {
-  events: LogEvent[] = [];
+export default class EventManager {
+  private eventContainer: EventsContainer;
   parseErrors: InstError[] = [];
+  private srcRoot: string;
+
+  constructor(events: EventsContainer, srcRoot: string) {
+    this.eventContainer = events;
+    this.srcRoot = srcRoot;
+  }
 
   /** file -> line -> [multiline events that cover this line and single line events] */
-  private byLine: Map<string, LogEvent[][]> = new Map();
+  private byLine: Map<string, Map<number, LogEvent[]>> = new Map();
 
   /** ctx_id (file@<fn line>) -> index */
   private byCtx: Map<string, LogEvent[]> = new Map();
 
   get hasEvents() {
-    return this.events.length !== 0;
+    return this.eventContainer.data.length !== 0;
+  }
+
+  get count() {
+    return this.eventContainer.data.length;
   }
 
   addEvent(event: LogEvent) {
@@ -22,7 +34,7 @@ export default class EventContainer {
       return;
     }
 
-    this.events.push(event);
+    if (!isValid(event)) return;
 
     let ctxArr = this.byCtx.get(event.ctx_id);
     if (!ctxArr) {
@@ -54,6 +66,7 @@ export default class EventContainer {
 
   getFileEvents(file: string): LogEvent[] {
     const list = [];
+    file = path.relative(this.srcRoot, file);
 
     for (const it of this.byCtx.entries()) {
       const [ctx_id, events] = it;
@@ -74,16 +87,20 @@ export default class EventContainer {
   }
 
   getEventsAtLine(file: string, line: number): LogEvent[] {
+    if (path.isAbsolute(file)) {
+      file = path.relative(this.srcRoot, file);
+    }
+
     let fileList = this.byLine.get(file);
     if (!fileList) {
-      fileList = [];
+      fileList = new Map();
       this.byLine.set(file, fileList);
     }
 
-    let lineEvents = fileList[line];
+    let lineEvents = fileList.get(line);
     if (!lineEvents) {
       lineEvents = [];
-      fileList[line] = lineEvents;
+      fileList.set(line, lineEvents);
     }
 
     return lineEvents;
@@ -94,7 +111,19 @@ export default class EventContainer {
   }
 
   get(i: number) {
-    return this.events[i];
+    return this.eventContainer.data[i];
+  }
+
+  getEnters() {
+    const list = [];
+
+    for (const it of this.byCtx.entries()) {
+      const [_, events] = it;
+      const enter = events.find((e) => e.event === "enter");
+      if (enter) list.push(enter);
+    }
+
+    return list;
   }
 
   findEntersForFn(ev: LogEvent) {
@@ -124,9 +153,76 @@ export default class EventContainer {
   }
 
   clear() {
-    this.events = [];
+    this.eventContainer.clear();
     this.parseErrors = [];
     this.byCtx = new Map();
     this.byLine = new Map();
+  }
+}
+
+function isValidLoc(loc: Loc) {
+  return (
+    !isNaN(loc.start.line) &&
+    !isNaN(loc.start.col) &&
+    !isNaN(loc.end.line) &&
+    !isNaN(loc.end.col)
+  );
+}
+
+const isValidStr = (str: string) => typeof str === "string" && str.length !== 0;
+
+function isValid(ev: LogEvent) {
+  try {
+    if (
+      !/\w+\@\d+\:\d+/.test(ev.ctx_id) ||
+      isNaN(ev.time) ||
+      !isValidLoc(ev.loc)
+    )
+      return false;
+
+    switch (ev.event) {
+      case "call":
+        return isValidStr(ev.callee) && isValidStr(ev.value);
+      case "catch_enter":
+        return isValidStr(ev.error);
+      case "change":
+        return (
+          isValidStr(ev.old_val) &&
+          isValidStr(ev.var.name) &&
+          isValidStr(ev.var.type) &&
+          isValidStr(ev.var.val)
+        );
+      case "declare":
+        return (
+          isValidStr(ev.var.name) &&
+          isValidStr(ev.var.type) &&
+          isValidStr(ev.var.val)
+        );
+      case "enter":
+        return (
+          isValidStr(ev.fn_name) &&
+          ev.args.every(
+            (a) =>
+              isValidLoc(a.loc) &&
+              isValidStr(a.name) &&
+              isValidStr(a.type) &&
+              isValidStr(a.val),
+          )
+        );
+      case "exit":
+        return !("return_val" in ev) || isValidStr(ev.return_val!);
+      case "expr":
+        return isValidStr(ev.val);
+      case "throw":
+        return isValidStr(ev.error);
+      case "if":
+        return typeof ev.isTruthy === "boolean";
+
+      default:
+        return false;
+    }
+  } catch (error) {
+    console.error(error);
+    return false;
   }
 }

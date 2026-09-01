@@ -19,24 +19,24 @@ function safeStringify(v: unknown): string {
 
 /** Human-readable location string, e.g. "path/to/file:5:2-7" or "…:5:2-6:3". */
 export function formatLoc(file: string, loc: Loc): string {
-  const start = `${file}:${loc.start.line + 1}:${loc.start.col + 1}`;
+  const start = `${file}:${loc.start.line}:${loc.start.col}`;
   if (loc.end.line === loc.start.line) {
-    return `${start}-${loc.end.col + 1}`;
+    return `${start}-${loc.end.col}`;
   }
-  return `${start}-${loc.end.line + 1}:${loc.end.col + 1}`;
+  return `${start}-${loc.end.line}:${loc.end.col}`;
 }
 
 /** Short, single-line summary for inline decorations. */
 export function formatEventInline(ev: LogEvent): string | undefined {
   switch (ev.event) {
     case "declare": {
-      return `${ev.var.name}: ${ev.var.type} = ${truncate(ev.var.value ?? "undefined")}`;
+      return `${ev.var.name}: ${ev.var.type} = ${truncate(ev.var.val ?? "undefined")}`;
     }
     case "call":
       return `→ ${ev.callee ?? "(call)"}`;
     case "enter": {
       const args = (ev.args ?? [])
-        .map((a: Var) => `${a.name}=${truncate(String(a.value))}`)
+        .map((a: Var) => `${a.name}=${truncate(String(a.val))}`)
         .join(", ");
       return `▶ enter ${ev.fn_name ?? ""}(${args})`;
     }
@@ -62,8 +62,9 @@ function singleLine(s: string): string {
 /** Compact value snippet for inline annotations next to the traced code. */
 export function formatEventValue(ev: LogEvent): string | undefined {
   switch (ev.event) {
+    case "declare":
     case "change":
-      return truncate(singleLine(safeStringify(ev.var.value)), 80);
+      return truncate(singleLine(safeStringify(ev.var.val)), 80);
     case "expr":
       return truncate(singleLine(safeStringify(ev.val)), 80);
     case "exit":
@@ -92,10 +93,10 @@ export function formatEventMarkdown(ev: LogEvent): string {
 
   switch (ev.event) {
     case "declare":
-      lines.push(`\`${ev.var.name}: ${ev.var.type} = ${ev.var.value}\``);
+      lines.push(`\`${ev.var.name}: ${ev.var.type} = ${ev.var.val}\``);
       break;
     case "change":
-      lines.push(`\`${ev.var.name}: ${ev.var.type} → ${ev.var.value}\``);
+      lines.push(`\`${ev.var.name}: ${ev.var.type} → ${ev.var.val}\``);
 
       if ("old_val" in ev) {
         lines.push(`old value: \`${safeStringify(ev.old_val)}\``);
@@ -115,7 +116,7 @@ export function formatEventMarkdown(ev: LogEvent): string {
       if (ev.args.length !== 0) {
         lines.push("args:");
         for (const a of ev.args) {
-          lines.push(`- \`${a.name}: ${a.type} = ${a.value}\``);
+          lines.push(`- \`${a.name}: ${a.type} = ${a.val}\``);
         }
       }
       break;

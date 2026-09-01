@@ -3,7 +3,7 @@
 
 #include "./utils.hpp"
 
-const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const LangOptions &LO);
+const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO);
 const std::string construct_func_return_ev(Loc &loc, ReturnStmt *RS, clang::SourceManager &SM, const clang::LangOptions &LO);
 const std::string construct_func_exit_ev(Loc &loc);
 

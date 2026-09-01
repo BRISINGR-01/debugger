@@ -1,4 +1,3 @@
-import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
 
@@ -46,7 +45,9 @@ export default function loadConfig(cliOptions: Config, debugDir: string) {
 
 function load(file: string) {
   try {
-    const loaded = fs.readFileSync(file).toJSON() as unknown as Config;
+    const loaded = JSON.parse(
+      fs.readFileSync(file).toString(),
+    ) as unknown as Config;
     return loaded && typeof loaded === "object" ? loaded : defaultData;
   } catch {}
 

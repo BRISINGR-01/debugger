@@ -15,18 +15,8 @@ bool InstrumentVisitor::VisitFunctionDecl(FunctionDecl *FD)
     if (!body)
         return true;
 
-    SourceLocation bodyStart = body->getBeginLoc();
-    if (bodyStart.isInvalid() || SM.isInSystemHeader(bodyStart))
-        return true;
-    SourceLocation bodyEnd = body->getEndLoc();
-    if (bodyEnd.isInvalid() || SM.isInSystemHeader(bodyEnd))
-        return true;
-    std::optional<Loc> location = getLoc(bodyStart, bodyEnd, SM);
+    std::optional<Loc> location = getLoc(body->getBeginLoc(), body->getEndLoc(), SM);
     if (!location.has_value())
-        return true;
-
-    PresumedLoc p_start = SM.getPresumedLoc(bodyStart);
-    if (p_start.isInvalid())
         return true;
 
     CompoundStmt *CS = dyn_cast<CompoundStmt>(body);
@@ -48,8 +38,11 @@ bool InstrumentVisitor::VisitFunctionDecl(FunctionDecl *FD)
         return false;
     }
 
+    PresumedLoc p_start = SM.getPresumedLoc(body->getBeginLoc());
+    if (p_start.isInvalid())
+        return true;
     std::string file = p_start.getFilename();
-    RW.InsertTextAfter(insertPt, construct_func_enter_ev(file, *location, func, FD, LO));
+    RW.InsertTextAfter(insertPt, construct_func_enter_ev(file, *location, func, FD, SM, LO));
 
     // ── Wrap return statements ────────────────────────────────────────────
     walkForReturns(CS, FD, func);

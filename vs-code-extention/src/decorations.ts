@@ -111,13 +111,8 @@ export class DecorationManager {
     }
 
     const document = editor.document;
-    const current = this.model.currentIndex;
     // annotation position ("line:col") -> best event index to annotate there
     const best = new Map<string, LogEvent>();
-    const argBest = new Map<
-      string,
-      { idx: number; arg: { name: string; type: string; value: string } }
-    >();
     const throwOptions: vscode.DecorationOptions[] = [];
     const ifTrueOptions: vscode.DecorationOptions[] = [];
     const ifFalseOptions: vscode.DecorationOptions[] = [];
@@ -159,11 +154,11 @@ export class DecorationManager {
             const lineText = document.lineAt(line).text;
             const clampedChar = Math.min(col, lineText.length);
 
-            const text = formatArgValue(arg.value);
+            const text = formatArgValue(arg.val);
             const md = new vscode.MarkdownString();
             md.isTrusted = false;
             md.appendMarkdown(
-              `**${arg.name}**: \`${arg.type}\` = \`${arg.value}\``,
+              `**${arg.name}**: \`${arg.type}\` = \`${arg.val}\``,
             );
             options.push({
               range: new vscode.Range(line, clampedChar, line, clampedChar),
@@ -191,7 +186,8 @@ export class DecorationManager {
 
     for (const ev of best.values()) {
       const loc = ev.loc;
-      const pos = this.annotationPosition(document, ev, loc)!;
+      const pos = this.annotationPosition(document, ev, loc);
+      if (!pos) continue;
       const text = formatEventValue(ev)!;
       options.push({
         range: new vscode.Range(
@@ -223,8 +219,8 @@ export class DecorationManager {
     if (loc.start.line < 0 || loc.end.line >= document.lineCount)
       return undefined;
     return {
-      line: ev.loc.end.line,
-      character: ev.loc.end.col,
+      line: ev.loc.end.line - 1,
+      character: ev.loc.end.col + 1,
     };
   }
 
