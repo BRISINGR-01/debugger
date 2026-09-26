@@ -18,7 +18,7 @@ bool InstrumentVisitor::VisitDeclStmt(DeclStmt *DS)
         if (!loc.has_value())
             return true;
 
-        RW.InsertTextAfterToken(DS->getEndLoc(), construct_var_decl_ev(*loc, VD, LO));
+        RW.InsertTextAfterToken(DS->getEndLoc(), construct_var_decl_ev(*loc, VD));
     }
     return true;
 }
@@ -89,7 +89,7 @@ bool InstrumentVisitor::TraverseBinaryOperator(BinaryOperator *BO)
     std::string rewrittenText = RW.getRewrittenText(fullRange);
 
     std::string newVarName = genVarName();
-    std::string type = typeStr(BO->getType(), LO);
+    std::string type = typeStr(BO->getType());
 
     std::ostringstream decl;
     if (BO->isAssignmentOp())
@@ -100,9 +100,10 @@ bool InstrumentVisitor::TraverseBinaryOperator(BinaryOperator *BO)
             // Converts original "c = 4 * _evN" into:
             // <type> <oldValName> = c;
             // c = 4 * __evN;
+            // <type> <newVarName> = c;
             // __assign(...)
 
-            std::string lhsName = exprStr(LHS, SM);
+            std::string lhsName = exprText(LHS, SM, LO);
             std::string oldValName = genVarName();
             decl
                 << construct_var_assign(type, oldValName, lhsName)
@@ -150,7 +151,7 @@ bool InstrumentVisitor::TraverseUnaryOperator(UnaryOperator *UO)
 
     CharSourceRange fullRange = CharSourceRange::getTokenRange(UO->getSourceRange());
     std::string rewrittenText = RW.getRewrittenText(fullRange);
-    std::string type = typeStr(UO->getType(), LO);
+    std::string type = typeStr(UO->getType());
     std::string oldValName = genVarName();
     std::string newValName = genVarName();
     std::string name = exprText(UO->getSubExpr(), SM, LO);

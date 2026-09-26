@@ -36,10 +36,22 @@ inline void __expr(const std::string ctx, std::string type, std::string val);
 #include <string>
 
 void __dbg_emit(const std::string);
+inline std::string __dbg_escape(std::string s)
+{
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s)
+    {
+        if (c == '"' || c == '\\')
+            out += '\\';
+        out += c;
+    }
+    return out;
+}
 
-#define __DBG_JFS(n, v) '"' + n + "\":\"" + v + '"'         // Json_Field_Str
-#define __DBG_JFN(n, v) '"' + n + "\":" + std::to_string(v) // Json_Field_Num
-#define __DBG_JF(n, v) '"' + n + "\":" + v                  // Json_Field
+#define __DBG_JFS(n, v) '"' + n + "\":\"" + __dbg_escape(v) + '"' // Json_Field_Str
+#define __DBG_JFN(n, v) '"' + n + "\":" + std::to_string(v)       // Json_Field_Num
+#define __DBG_JF(n, v) '"' + n + "\":" + v                        // Json_Field
 #define __DBG(v) static_cast<std::string>(debug().noloc(), v)
 
 static std::string __dbg_gen_id(std::string file, int line)

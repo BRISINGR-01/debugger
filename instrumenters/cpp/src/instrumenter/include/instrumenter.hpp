@@ -1,26 +1,4 @@
 #pragma once
-// ============================================================================
-//  instrumenter.cpp  —  Clang AST plugin
-
-// Required by the GCC/Clang plugin loader — declares GPL compatibility.
-// Without this symbol the host compiler refuses to dlopen the plugin.
-//
-//  Instruments C++ source with recorder calls at:
-//    • function entry / return / fall-through exit
-//    • local variable declarations (with initialiser)
-//    • assignments (BinaryOperator '=', compound-assign)
-//    • try blocks / catch clauses / throw expressions
-//    • if/else/switch branches
-//    • for/while/do loop iterations
-//
-//  Build:
-//      cmake -B build && cmake --build build
-//
-//  Usage:
-//      clang++ -fplugin=./build/Instrumenter.so \
-//              -include recorder_runtime.h \
-//              -std=c++20 -c example.cpp
-// ============================================================================
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -29,6 +7,7 @@
 #include "clang/Lex/Lexer.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/AST/RecordLayout.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <set>
@@ -41,6 +20,7 @@
 
 #include "./utils.hpp"
 #include "./construct_calls.hpp"
+#include "./schema.hpp"
 
 class InstrumentVisitor : public RecursiveASTVisitor<InstrumentVisitor>
 {
@@ -52,7 +32,6 @@ public:
     bool VisitLambdaExpr(LambdaExpr *LE);
 
     bool VisitDeclStmt(DeclStmt *DS);
-    // bool VisitBinaryOperator(BinaryOperator *BO);
     bool TraverseCompoundStmt(CompoundStmt *CS);
     bool TraverseUnaryOperator(UnaryOperator *UO);
     bool TraverseIfStmt(IfStmt *IS);
@@ -62,6 +41,7 @@ public:
     bool VisitDoStmt(DoStmt *S);
     bool VisitForStmt(ForStmt *S);
     bool VisitCXXForRangeStmt(CXXForRangeStmt *S);
+    bool VisitRecordDecl(clang::RecordDecl *D);
 
 private:
     Rewriter &RW;
@@ -105,19 +85,13 @@ private:
     void instrumentReturn(ReturnStmt *RS, FunctionDecl *FD, const std::string &fname);
     // Ensure a statement body is wrapped in braces (for braceless if/loop bodies).
     void ensureBraces(Stmt *body);
-    FunctionDecl *getEnclosingFunction(Decl *D);
-    FunctionDecl *getEnclosingFunctionByLoc(SourceLocation loc);
-
-public:
-    // Allow the consumer to inject a lookup function
-    std::function<FunctionDecl *(SourceLocation)> fnLookup;
 };
 
 class InstrumenterConsumer : public ASTConsumer
 {
 public:
-    std::string outputDir;
-    std::string srcRoot;
+    std::filesystem::path outputDir;
+    std::filesystem::path srcRoot;
 
     explicit InstrumenterConsumer(CompilerInstance &CI);
     void HandleTranslationUnit(ASTContext &Ctx) override;
@@ -125,21 +99,7 @@ public:
 private:
     CompilerInstance &CI;
     Rewriter RW;
-    std::string recorderImpl;
-};
-
-class InstrumenterAction : public PluginASTAction
-{
-
-private:
-    std::string outputDir;
-    std::string srcRoot;
-
-public:
-    std::unique_ptr<ASTConsumer>
-    CreateASTConsumer(CompilerInstance &CI, llvm::StringRef) override;
-    bool ParseArgs(const CompilerInstance &,
-                   const std::vector<std::string> &args) override;
-    // Run after the main action (parsing) so we get the full AST.
-    ActionType getActionType() override;
+    std::filesystem::path recorderDecl;
+    std::filesystem::path recorderImpl;
+    std::filesystem::path recorderCommon;
 };

@@ -2,58 +2,57 @@ import fs from "fs";
 import path from "path";
 
 export type Config = {
-  command: string | undefined;
-  ioFilePath: string | undefined;
-  excludePattern: string[];
-  shouldRestart: boolean;
-  disable: boolean;
-  shouldWatch: boolean;
-  httpPort: number;
+	command: string | undefined;
+	ioFilePath: string | undefined;
+	excludePattern: string[];
+	shouldRestart: boolean;
+	disable: boolean;
+	shouldWatch: boolean;
+	httpPort: number;
 };
 
 const defaultData: Config = {
-  command: undefined,
-  ioFilePath: undefined,
-  excludePattern: [],
-  shouldRestart: true,
-  disable: false,
-  shouldWatch: true,
-  httpPort: 5634,
+	command: undefined,
+	ioFilePath: undefined,
+	excludePattern: [],
+	shouldRestart: true,
+	disable: false,
+	shouldWatch: true,
+	httpPort: 5634,
 };
 
-export default function loadConfig(cliOptions: Config, debugDir: string) {
-  const file = path.join(debugDir, ".dbg-config.json");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+export default function loadConfig(options: Config, debugDir: string) {
+	const file = path.join(debugDir, ".dbg-config.json");
 
-  let data: Config = {
-    ...defaultData,
-    ...cliOptions,
-  };
+	fs.mkdirSync(path.dirname(file), { recursive: true });
 
-  if (fs.existsSync(file)) {
-    const loaded = load(file);
-    data = {
-      ...cliOptions,
-      ...loaded,
-    };
-  }
+	let data: Config = {
+		...defaultData,
+		...options,
+	};
 
-  data.ioFilePath = path.join(debugDir, ".dbg-socket");
-  save(file, data);
-  return data;
+	if (fs.existsSync(file)) {
+		const loaded = load(file);
+		data = {
+			...options,
+			...loaded,
+		};
+	}
+
+	data.ioFilePath = path.join(debugDir, ".dbg-socket");
+	save(file, data);
+	return data;
 }
 
 function load(file: string) {
-  try {
-    const loaded = JSON.parse(
-      fs.readFileSync(file).toString(),
-    ) as unknown as Config;
-    return loaded && typeof loaded === "object" ? loaded : defaultData;
-  } catch {}
+	try {
+		const loaded = JSON.parse(fs.readFileSync(file).toString()) as unknown as Config;
+		return loaded && typeof loaded === "object" ? loaded : defaultData;
+	} catch {}
 
-  return defaultData;
+	return defaultData;
 }
 
 function save(file: string, data: Config) {
-  fs.writeFileSync(file, JSON.stringify(data));
+	fs.writeFileSync(file, JSON.stringify(data));
 }

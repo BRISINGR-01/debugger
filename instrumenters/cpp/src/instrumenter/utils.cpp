@@ -1,7 +1,9 @@
 #include <mutex>
 #include <string>
-#include "./include/utils.hpp"
+#include <fstream>
 #include <clang/AST/ParentMapContext.h>
+
+#include "./include/utils.hpp"
 
 std::string escape(std::string s)
 {
@@ -16,16 +18,13 @@ std::string escape(std::string s)
     return out;
 }
 
-std::string typeStr(QualType qt, const LangOptions &LO)
+std::string typeStr(QualType qt)
 {
-    qt = qt.getUnqualifiedType();
+    qt = qt.getUnqualifiedType().getNonReferenceType();
 
     if (qt->isBooleanType())
     {
-        if (LO.CPlusPlus)
-            return "bool";
-        else
-            return "_Bool";
+        return "short";
     }
 
     return qt.getAsString();
@@ -96,10 +95,41 @@ std::string getLambdaVariableName(CXXMethodDecl *FD, ASTContext &Ctx)
     return {};
 }
 
-// Uses Lexer to pull the exact original source text for an expr,
-// needed since Expr nodes don't carry their spelling directly.
-std::string exprStr(Expr *E, SourceManager &SM)
+std::string read_file(std::filesystem::path path)
 {
-    CharSourceRange range = CharSourceRange::getTokenRange(E->getSourceRange());
-    return Lexer::getSourceText(range, SM, LangOptions()).str();
+    constexpr auto read_size = std::size_t{4096};
+    auto stream = std::ifstream{path};
+    stream.exceptions(std::ios_base::badbit);
+
+    if (!stream.is_open())
+    {
+        std::cerr << "Error opening \"" << path << '"' << std::endl;
+        exit(1);
+    }
+
+    auto out = std::string{};
+    auto buf = std::string(read_size, '\0');
+    while (stream.read(&buf[0], read_size))
+    {
+        out.append(buf, 0, stream.gcount());
+    }
+    out.append(buf, 0, stream.gcount());
+    return out;
+}
+
+const std::vector<std::string> numbers{"_Bool", "bool", "char", "short", "int", "long", "float", "double"};
+const DebugType typeFromStr(const std::string type)
+{
+    if (std::count(numbers.cbegin(), numbers.cend(), type) != 0)
+    {
+        return DebugType::Number;
+    }
+    if (type == "void")
+        return DebugType::Void;
+
+    if (type == "std::string")
+        return DebugType::String;
+
+    std::cout << type << std::endl;
+    return DebugType::Unknown;
 }

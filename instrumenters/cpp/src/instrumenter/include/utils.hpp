@@ -1,7 +1,6 @@
 #pragma once
 
 #include "clang/AST/ASTConsumer.h"
-#include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/Rewrite/Core/Rewriter.h"
@@ -36,13 +35,23 @@ struct Loc
     } end;
 };
 
+enum class DebugType
+{
+    Number = 0,
+    String,
+    Void,
+    Object,
+    Unknown
+};
+
 std::string escape(std::string s);
 
-std::string typeStr(QualType qt, const LangOptions &LO);
+std::string typeStr(QualType qt);
 // Get the source text of an expression (may be empty on failure).
 std::string exprText(const Expr *e, const SourceManager &SM,
                      const LangOptions &LO);
 std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const SourceManager &SM);
 bool shouldSkipFn(const std::string &funcName);
 std::string getLambdaVariableName(CXXMethodDecl *FD, ASTContext &Ctx);
-std::string exprStr(Expr *E, SourceManager &SM);
+std::string read_file(std::filesystem::path path);
+const DebugType typeFromStr(const std::string type);

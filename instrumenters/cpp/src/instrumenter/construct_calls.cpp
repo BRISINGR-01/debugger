@@ -1,7 +1,8 @@
 #include "include/construct_calls.hpp"
 
-const std::string to_dbg_str(const std::string rtext)
+const std::string to_dbg_str(const std::string rtext, const std::string type)
 {
+    typeFromStr(type);
     return "__DBG(" + rtext + ")";
 }
 
@@ -29,7 +30,7 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const Source
         if (P->getName().empty())
             continue;
         std::string name = P->getNameAsString();
-        std::string type = typeStr(P->getType(), LO);
+        std::string type = typeStr(P->getType());
 
         auto loc = getLoc(P->getBeginLoc(), Lexer::getLocForEndOfToken(P->getEndLoc(), 0, SM, LO), SM);
         if (!loc.has_value())
@@ -38,7 +39,7 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const Source
         os << "{\""
            << escape(name) << "\",\""
            << escape(type) << "\","
-           << to_dbg_str(name) << ","
+           << to_dbg_str(name, type) << ","
            << std::to_string(loc->start.line) << ","
            << std::to_string(loc->start.col) << ","
            << std::to_string(loc->end.line) << ","
@@ -71,12 +72,12 @@ const std::string construct_func_return_ev(Loc &loc, ReturnStmt *RS, clang::Sour
     if (rtext.empty())
         return construct_func_exit_ev(loc);
 
-    std::string tname = typeStr(retVal->getType(), LO);
+    std::string tname = typeStr(retVal->getType());
     std::ostringstream os;
 
     os << "__func_return(";
     addCtx(os, "exit", loc);
-    os << ",\"" << escape(tname) << "\"," << to_dbg_str(rtext) << ");\n";
+    os << ",\"" << escape(tname) << "\"," << to_dbg_str(rtext, typeStr(retVal->getType())) << ");\n";
     return os.str();
 }
 
@@ -90,16 +91,16 @@ const std::string construct_func_exit_ev(Loc &loc)
     return os.str();
 }
 
-const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD, const LangOptions &LO)
+const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD)
 {
 
     std::string name = VD->getNameAsString();
-    std::string type = typeStr(VD->getType(), LO);
+    std::string type = typeStr(VD->getType());
 
     std::ostringstream os;
     os << "__var_decl(";
     addCtx(os, "declare", loc);
-    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(name) << ");\n";
+    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(name, type) << ");\n";
 
     return os.str();
 }
@@ -114,7 +115,7 @@ const std::string construct_expr_ev(Loc &loc, const std::string type, const std:
     std::ostringstream os;
     os << "__expr(";
     addCtx(os, "expr", loc);
-    os << ", \"" << type << "\", " << to_dbg_str(tmpVarName) << ");\n";
+    os << ", \"" << type << "\", " << to_dbg_str(tmpVarName, type) << ");\n";
 
     return os.str();
 }
@@ -124,7 +125,7 @@ const std::string construct_assign_ev(Loc &loc, const std::string type, const st
     std::ostringstream os;
     os << "__var_change(";
     addCtx(os, "change", loc);
-    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(tmpVarName) << ", " << to_dbg_str(oldVarName) << ");\n";
+    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(tmpVarName, type) << ", " << to_dbg_str(oldVarName, type) << ");\n";
 
     return os.str();
 }

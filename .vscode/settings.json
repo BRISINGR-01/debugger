@@ -1,5 +1,7 @@
 {
   "python-envs.defaultEnvManager": "ms-python.python:system",
   "cmake.sourceDirectory": "/home/alex/Desktop/VSC/debugger/cpp/src",
-  "C_Cpp.default.compilerPath": "/usr/bin/clang++"
+  "C_Cpp.default.compilerPath": "/usr/bin/clang++",
+  "renderControlCharacters": false,
+  "nixEnvSelector.suggestion": false
 }

@@ -38,8 +38,8 @@
         "-tune-cpu",
         "generic",
         "-debugger-tuning=gdb",
-        "-fdebug-compilation-dir=/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test",
-        "-fcoverage-compilation-dir=/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test",
+        "-fdebug-compilation-dir=/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/syntax",
+        "-fcoverage-compilation-dir=/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/syntax",
         "-resource-dir",
         "/usr/lib/clang/22",
         "-internal-isystem",
@@ -69,39 +69,51 @@
         "-fcxx-exceptions",
         "-fexceptions",
         "-load",
-        "../src/build/Instrumenter.so",
+        "../../build/Instrumenter.so",
         "-plugin-arg-instrumenter",
-        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug",
+        "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/syntax/.debug",
         "-faddrsig",
         "-fdwarf2-cfi-asm",
         "-o",
         "/tmp/example-4bd6da.o",
         "-x",
         "c++",
-        "main.cpp",
-        "printVals.cpp",
+        "structures.cpp",
         "dbg-emit.cpp"
       ],
-      // clang++ -fplugin=../src/build/Instrumenter.so -std=c++20 printVals.cpp -fplugin-arg-instrumenter-/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug -o /dev/null -### 2>&1 | grep -- '"-cc1"' | python3 -c 'import sys,shlex,json; print(json.dumps(shlex.split(sys.stdin.read())[1:]))' | c
-      "cwd": "${workspaceFolder}/instrumenters/cpp/test",
+      // clang++ -fplugin=../build/Instrumenter.so -std=c++20 printVals.cpp -fplugin-arg-instrumenter-/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test/.debug -o /dev/null -### 2>&1 | grep -- '"-cc1"' | python3 -c 'import sys,shlex,json; print(json.dumps(shlex.split(sys.stdin.read())[1:]))' | c
+      "cwd": "${workspaceFolder}/instrumenters/cpp/test/syntax",
       "stopAtEntry": false,
       "externalConsole": false,
       "MIMode": "gdb",
-      "setupCommands": [{ "text": "set breakpoint pending on" }]
+      "setupCommands": [
+        {
+          "text": "set breakpoint pending on"
+        }
+      ]
     },
     {
       "name": "Launch index.js",
       "program": "${file}",
       "request": "launch",
-      "skipFiles": ["<node_internals>/**"],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
       "type": "node",
-      "args": ["-p", "js/test", "node", "test/main.js"]
+      "args": [
+        "-p",
+        "js/test",
+        "node",
+        "test/main.js"
+      ]
     },
     {
       "name": "Launch instrumenter (js)",
       "program": "/home/alex/Desktop/VSC/debugger/instrumenters/js/src/index.ts",
       "request": "launch",
-      "skipFiles": ["<node_internals>/**"],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
       "type": "node",
       "args": [
         "instrument",
@@ -120,15 +132,22 @@
       "program": "/home/alex/Desktop/VSC/debugger/debugger/cli.ts",
       "cwd": "/home/alex/Desktop/VSC/debugger/instrumenters/cpp/test",
       "request": "launch",
-      "skipFiles": ["<node_internals>/**"],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
       "type": "node",
-      "args": ["./cmake.sh && ./build/app"]
+      "args": [
+        "./cmake.sh && ./build/app"
+      ]
     },
     {
       "name": "Python Debugger: Current File",
       "type": "debugpy",
       "request": "launch",
-      "args": ["--exe", "cpp/test/main.o"],
+      "args": [
+        "--exe",
+        "cpp/test/main.o"
+      ],
       "program": "${file}",
       "console": "integratedTerminal"
     }

@@ -17,8 +17,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
-#include "header.h"
-#include "../dbg-header.hpp"
+// #include "../dbg-header.hpp"
 
 #include <algorithm>
 #include <array>
@@ -77,23 +76,23 @@ void debug_strings()
     std::u32string utf32{U"UTF-32"};
 
     printf("std::string str{\"hello world\"}\n");
-    debug(), str;
+    // debug(), str;
     printf("std::string empty{}\n");
-    debug(), empty;
+    // debug(), empty;
     printf("std::string repeated(10, 'x')\n");
-    debug(), repeated;
+    // debug(), repeated;
     printf("std::string_view view{\"hello\"}\n");
-    debug(), view;
+    // debug(), view;
     printf("std::string_view empty_view{}\n");
-    debug(), empty_view;
+    // debug(), empty_view;
     printf("std::wstring wide{L\"wide string\"}\n");
-    debug(), wide;
+    // debug(), wide;
     printf("std::u8string utf8{...}\n");
-    debug(), utf8;
+    // debug(), utf8;
     printf("std::u16string utf16{...}\n");
-    debug(), utf16;
+    // debug(), utf16;
     printf("std::u32string utf32{...}\n");
-    debug(), utf32;
+    // debug(), utf32;
 }
 
 // ------------------------------------------------------------
@@ -114,17 +113,17 @@ void debug_sequence_containers()
     std::forward_list<int> forward_list{1, 2, 3};
 
     printf("std::vector vec{1, 2, 3}\n");
-    debug(), vec;
+    // debug(), vec;
     printf("std::vector<int> empty_vec{}\n");
-    debug(), empty_vec;
+    // debug(), empty_vec;
     printf("std::array<int, 4> arr{1, 2, 3, 4}\n");
-    debug(), arr;
+    // debug(), arr;
     printf("std::deque<int> deque{1, 2, 3}\n");
-    debug(), deque;
+    // debug(), deque;
     printf("std::list<int> list{1, 2, 3}\n");
-    debug(), list;
+    // debug(), list;
     printf("std::forward_list<int> forward_list{1, 2, 3}\n");
-    debug(), forward_list;
+    // debug(), forward_list;
 }
 
 // ------------------------------------------------------------
@@ -161,21 +160,21 @@ void debug_associative_containers()
         {"x", 2}};
 
     printf("std::set<int> set{1, 2, 3}\n");
-    debug(), set;
+    // debug(), set;
     printf("std::multiset<int> multiset{1, 1, 2, 3}\n");
-    debug(), multiset;
+    // debug(), multiset;
     printf("std::map<std::string, int> map{...}\n");
-    debug(), map;
+    // debug(), map;
     printf("std::multimap<std::string, int> multimap{...}\n");
-    debug(), multimap;
+    // debug(), multimap;
     printf("std::unordered_set<int> unordered_set{...}\n");
-    debug(), unordered_set;
+    // debug(), unordered_set;
     printf("std::unordered_multiset<int> unordered_multiset{...}\n");
-    debug(), unordered_multiset;
+    // debug(), unordered_multiset;
     printf("std::unordered_map<std::string, int> unordered_map{...}\n");
-    debug(), unordered_map;
+    // debug(), unordered_map;
     printf("std::unordered_multimap<std::string, int> unordered_multimap{...}\n");
-    debug(), unordered_multimap;
+    // debug(), unordered_multimap;
 }
 
 // ------------------------------------------------------------
@@ -1256,85 +1255,85 @@ void primitives()
 {
     bool b = false;
     printf("bool b = false\n");
-    debug(), b;
+    // debug(), b;
     char c = 'c';
     printf("char c = 'c'\n");
-    debug(), c;
+    // debug(), c;
     signed char sc = -12;
     printf("signed char sc = -12\n");
-    debug(), sc;
+    // debug(), sc;
     unsigned char uc = 250;
     printf("unsigned char uc = 250\n");
-    debug(), uc;
+    // debug(), uc;
     short sh = 3;
     printf("short sh = 3\n");
-    debug(), sh;
+    // debug(), sh;
     short int si = -13;
     printf("short int si = -13\n");
-    debug(), si;
+    // debug(), si;
     signed short ss = 534;
     printf("signed short ss = 534\n");
-    debug(), ss;
+    // debug(), ss;
     signed short int ssi = -654;
     printf("signed short int ssi = -654\n");
-    debug(), ssi;
+    // debug(), ssi;
     unsigned short us = 123;
     printf("unsigned short us = 123\n");
-    debug(), us;
+    // debug(), us;
     unsigned short int usi = 43;
     printf("unsigned short int usi = 43\n");
-    debug(), usi;
+    // debug(), usi;
     int i = 0;
     printf("int i = 0\n");
-    debug(), i;
+    // debug(), i;
     signed s = 1;
     printf("signed s = 1\n");
-    debug(), s;
+    // debug(), s;
     signed int sii = -54;
     printf("signed int sii = -54\n");
-    debug(), sii;
+    // debug(), sii;
     unsigned u = 0;
     printf("unsigned u = 0\n");
-    debug(), u;
+    // debug(), u;
     unsigned int ui = 54;
     printf("unsigned int ui = 54\n");
-    debug(), ui;
+    // debug(), ui;
     long l = -5226349;
     printf("long l = -5226349\n");
-    debug(), l;
+    // debug(), l;
     long int li = 5226349;
     printf("long int li = 5226349\n");
-    debug(), li;
+    // debug(), li;
     signed long sl = 67896978;
     printf("signed long sl = 67896978\n");
-    debug(), sl;
+    // debug(), sl;
     signed long int sli = -64378926;
     printf("signed long int sli = -64378926\n");
-    debug(), sli;
+    // debug(), sli;
     unsigned long ul = 798;
     printf("unsigned long ul = 798\n");
-    debug(), ul;
+    // debug(), ul;
     unsigned long int uli = 7899;
     printf("unsigned long int uli = 7899\n");
-    debug(), uli;
+    // debug(), uli;
     unsigned long long ull = 4673489;
     printf("unsigned long long ull = 4673489\n");
-    debug(), ull;
+    // debug(), ull;
     unsigned long long int ulli = 56347895634978;
     printf("unsigned long long int ulli = 56347895634978\n");
-    debug(), ulli;
+    // debug(), ulli;
     float f = -432.432;
     printf("float f = -432.432\n");
-    debug(), f;
+    // debug(), f;
     double d = 43242.43;
     printf("double d = 43242.43\n");
-    debug(), d;
+    // debug(), d;
     long double ld = 423413412.4123412;
     printf("long double ld = 423413412.4123412\n");
-    debug(), ld;
+    // debug(), ld;
 }
 
-int main()
+int main2()
 {
     // primitives();
     // debug_strings();
@@ -1381,4 +1380,6 @@ int main()
     // debug_nested_types();
     // debug_monster();
     // debug_variable_states();
+
+    return 0;
 }
