@@ -18,7 +18,7 @@ bool InstrumentVisitor::VisitDeclStmt(DeclStmt *DS)
         if (!loc.has_value())
             return true;
 
-        RW.InsertTextAfterToken(DS->getEndLoc(), construct_var_decl_ev(*loc, VD));
+        RW.InsertTextAfterToken(DS->getEndLoc(), construct_var_decl_ev(*loc, VD, serializer));
     }
     return true;
 }
@@ -40,7 +40,6 @@ bool InstrumentVisitor::TraverseCompoundStmt(CompoundStmt *CS)
 // before the WHOLE enclosing statement, not inside the condition.
 bool InstrumentVisitor::TraverseIfStmt(IfStmt *IS)
 {
-
     pushBoundary();
     if (Expr *cond = IS->getCond())
         TraverseStmt(cond);
@@ -89,7 +88,7 @@ bool InstrumentVisitor::TraverseBinaryOperator(BinaryOperator *BO)
     std::string rewrittenText = RW.getRewrittenText(fullRange);
 
     std::string newVarName = genVarName();
-    std::string type = typeStr(BO->getType());
+    const QualType type = BO->getType();
 
     std::ostringstream decl;
     if (BO->isAssignmentOp())
@@ -106,23 +105,23 @@ bool InstrumentVisitor::TraverseBinaryOperator(BinaryOperator *BO)
             std::string lhsName = exprText(LHS, SM, LO);
             std::string oldValName = genVarName();
             decl
-                << construct_var_assign(type, oldValName, lhsName)
+                << construct_var_assign(type, oldValName, lhsName, serializer)
                 << rewrittenText << ";\n"
-                << construct_var_assign(type, newVarName, lhsName)
-                << construct_assign_ev(*loc, type, lhsName, oldValName, newVarName);
+                << construct_var_assign(type, newVarName, lhsName, serializer)
+                << construct_assign_ev(*loc, type, lhsName, oldValName, newVarName, serializer);
         }
         else
         {
             // LHS has side effects (e.g. arr[i++]) -- don't duplicate it;
             // fall back to logging new value only, no oldval capture.
-            decl << construct_var_assign(type, newVarName, rewrittenText)
-                 << construct_expr_ev(*loc, type, newVarName);
+            decl << construct_var_assign(type, newVarName, rewrittenText, serializer)
+                 << construct_expr_ev(*loc, type, newVarName, serializer);
         }
     }
     else
     {
-        decl << construct_var_assign(type, newVarName, rewrittenText)
-             << construct_expr_ev(*loc, type, newVarName);
+        decl << construct_var_assign(type, newVarName, rewrittenText, serializer)
+             << construct_expr_ev(*loc, type, newVarName, serializer);
     }
 
     pendingStmts.back().push_back(decl.str());
@@ -151,16 +150,16 @@ bool InstrumentVisitor::TraverseUnaryOperator(UnaryOperator *UO)
 
     CharSourceRange fullRange = CharSourceRange::getTokenRange(UO->getSourceRange());
     std::string rewrittenText = RW.getRewrittenText(fullRange);
-    std::string type = typeStr(UO->getType());
+    const QualType type = UO->getType();
     std::string oldValName = genVarName();
     std::string newValName = genVarName();
     std::string name = exprText(UO->getSubExpr(), SM, LO);
 
     std::ostringstream decl;
-    decl << construct_var_assign(type, oldValName, name)
+    decl << construct_var_assign(type, oldValName, name, serializer)
          << rewrittenText << ";\n"
-         << construct_var_assign(type, newValName, name)
-         << construct_assign_ev(*loc, type, name, oldValName, newValName);
+         << construct_var_assign(type, newValName, name, serializer)
+         << construct_assign_ev(*loc, type, name, oldValName, newValName, serializer);
 
     pendingStmts.back().push_back(decl.str());
     RW.ReplaceText(fullRange, oldValName);

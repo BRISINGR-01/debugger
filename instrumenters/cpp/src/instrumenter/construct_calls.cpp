@@ -1,11 +1,5 @@
 #include "include/construct_calls.hpp"
 
-const std::string to_dbg_str(const std::string rtext, const std::string type)
-{
-    typeFromStr(type);
-    return "__DBG(" + rtext + ")";
-}
-
 void addCtx(
     std::ostringstream &os, const std::string &kind, Loc &loc)
 {
@@ -14,7 +8,7 @@ void addCtx(
        << loc.end.line << "," << loc.end.col << ")";
 }
 
-int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO)
+int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO, ValueSerializer &serializer)
 {
     int args_count = 0;
     for (const ParmVarDecl *P : FD->parameters())
@@ -30,7 +24,7 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const Source
         if (P->getName().empty())
             continue;
         std::string name = P->getNameAsString();
-        std::string type = typeStr(P->getType());
+        const QualType type = P->getType();
 
         auto loc = getLoc(P->getBeginLoc(), Lexer::getLocForEndOfToken(P->getEndLoc(), 0, SM, LO), SM);
         if (!loc.has_value())
@@ -38,8 +32,8 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const Source
 
         os << "{\""
            << escape(name) << "\",\""
-           << escape(type) << "\","
-           << to_dbg_str(name, type) << ","
+           << escape(serializer.typeToStr(type)) << "\","
+           << serializer.serialize(name, type) << ","
            << std::to_string(loc->start.line) << ","
            << std::to_string(loc->start.col) << ","
            << std::to_string(loc->end.line) << ","
@@ -52,10 +46,10 @@ int construct_args(std::ostringstream &os, clang::FunctionDecl *FD, const Source
     return args_count;
 }
 
-const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO)
+const std::string construct_func_enter_ev(const std::string &file, Loc &loc, const std::string &func, clang::FunctionDecl *FD, const SourceManager &SM, const LangOptions &LO, ValueSerializer &serializer)
 {
     std::ostringstream os;
-    int args_count = construct_args(os, FD, SM, LO);
+    int args_count = construct_args(os, FD, SM, LO, serializer);
     os << "std::string __dbg_ctx_id = __dbg_gen_id(\"" << escape(file) << "\", " + std::to_string(loc.start.line) + ");\n"
        << "__func_enter(";
     addCtx(os, "enter", loc);
@@ -63,7 +57,7 @@ const std::string construct_func_enter_ev(const std::string &file, Loc &loc, con
     return os.str();
 }
 
-const std::string construct_func_return_ev(Loc &loc, ReturnStmt *RS, clang::SourceManager &SM, const clang::LangOptions &LO)
+const std::string construct_func_return_ev(Loc &loc, ReturnStmt *RS, clang::SourceManager &SM, const clang::LangOptions &LO, ValueSerializer &serializer)
 {
     Expr *retVal = RS->getRetValue();
     if (!retVal)
@@ -72,12 +66,12 @@ const std::string construct_func_return_ev(Loc &loc, ReturnStmt *RS, clang::Sour
     if (rtext.empty())
         return construct_func_exit_ev(loc);
 
-    std::string tname = typeStr(retVal->getType());
+    std::string tname = serializer.typeToStr(retVal->getType());
     std::ostringstream os;
 
     os << "__func_return(";
     addCtx(os, "exit", loc);
-    os << ",\"" << escape(tname) << "\"," << to_dbg_str(rtext, typeStr(retVal->getType())) << ");\n";
+    os << ",\"" << escape(tname) << "\"," << serializer.serialize(rtext, retVal->getType()) << ");\n";
     return os.str();
 }
 
@@ -91,41 +85,40 @@ const std::string construct_func_exit_ev(Loc &loc)
     return os.str();
 }
 
-const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD)
+const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD, ValueSerializer &serializer)
 {
-
-    std::string name = VD->getNameAsString();
-    std::string type = typeStr(VD->getType());
+    const std::string name = VD->getNameAsString();
+    const QualType type = VD->getType();
 
     std::ostringstream os;
     os << "__var_decl(";
     addCtx(os, "declare", loc);
-    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(name, type) << ");\n";
+    os << ", \"" << name << "\", \"" << serializer.typeToStr(type) << "\", " << serializer.serialize(name, type) << ");\n";
 
     return os.str();
 }
 
-const std::string construct_var_assign(const std::string type, const std::string name, const std::string expr)
+const std::string construct_var_assign(const QualType type, const std::string name, const std::string expr, ValueSerializer &serializer)
 {
-    return type + " " + name + " = " + expr + ";\n";
+    return serializer.typeToStr(type) + " " + name + " = " + expr + ";\n";
 }
 
-const std::string construct_expr_ev(Loc &loc, const std::string type, const std::string tmpVarName)
+const std::string construct_expr_ev(Loc &loc, const QualType type, const std::string tmpVarName, ValueSerializer &serializer)
 {
     std::ostringstream os;
     os << "__expr(";
     addCtx(os, "expr", loc);
-    os << ", \"" << type << "\", " << to_dbg_str(tmpVarName, type) << ");\n";
+    os << ", \"" << serializer.typeToStr(type) << "\", " << serializer.serialize(tmpVarName, type) << ");\n";
 
     return os.str();
 }
 
-const std::string construct_assign_ev(Loc &loc, const std::string type, const std::string name, const std::string oldVarName, const std::string tmpVarName)
+const std::string construct_assign_ev(Loc &loc, const QualType type, const std::string name, const std::string oldVarName, const std::string tmpVarName, ValueSerializer &serializer)
 {
     std::ostringstream os;
     os << "__var_change(";
     addCtx(os, "change", loc);
-    os << ", \"" << name << "\", \"" << type << "\", " << to_dbg_str(tmpVarName, type) << ", " << to_dbg_str(oldVarName, type) << ");\n";
+    os << ", \"" << name << "\", \"" << serializer.typeToStr(type) << "\", " << serializer.serialize(tmpVarName, type) << ", " << serializer.serialize(oldVarName, type) << ");\n";
 
     return os.str();
 }

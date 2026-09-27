@@ -119,26 +119,11 @@ void fn()
 #include <vector>
 #include <cstring>
 #include <fstream>
-// Injected runtime function
-extern "C" void __instrument_capture_struct(const void *ptr, size_t size, const char *struct_id)
-{
-    if (!ptr)
-        return;
-
-    std::vector<uint8_t> buffer(size);
-    std::memcpy(buffer.data(), ptr, size);
-
-    // Persist raw memory buffer alongside the schema identifier
-    std::ofstream out(std::string(struct_id) + ".bin", std::ios::binary);
-    out.write(reinterpret_cast<const char *>(buffer.data()), size);
-}
 // ── Main ──────────────────────────────────────────────────────────────────
 int main()
 {
     STT st{9};
-    __instrument_capture_struct(&st, sizeof(st), "1s");
     st.d = 8;
-    __instrument_capture_struct(&st, sizeof(st), "2s");
     auto a = st;
     int i = 9;
     ComplexTest ct{
@@ -154,7 +139,6 @@ int main()
         "ptr",
         &i,
     };
-    __instrument_capture_struct(&ct, sizeof(ct), "ct");
     // int a = 9, b, cc = -1;
     // a++;
     // cc = 9 * (a + 1);
@@ -171,7 +155,6 @@ int main()
     Counter c(2);
     c.increment();
     c.increment();
-    __instrument_capture_struct(&ct, sizeof(ct), "ct");
 
     int product = multiply(c.get(), 4);
 

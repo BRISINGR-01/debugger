@@ -7,7 +7,7 @@ namespace vtrace
   namespace
   {
 
-        /// True if the type can be written out in source at all. Unnamed records with
+    /// True if the type can be written out in source at all. Unnamed records with
     /// no typedef name print as "struct (unnamed at foo.c:12)", which won't build.
     bool isNameable(QualType C)
     {
@@ -125,7 +125,7 @@ namespace vtrace
       std::string Addr = "&" + P;
       if (IsVolatile && isNameable(C))
         Addr = "(const " + typeText(C, Ctx, O.isC) + " *)" + Addr;
-      return SN + O.dbgToken + "(" + S + ", " + Addr + ");";
+      return SN + O.dbgPrefix + "(" + S + ", " + Addr + ");";
     }
 
     // ------------------------------------------------------------------ enums
@@ -133,7 +133,7 @@ namespace vtrace
     {
       const std::string SN = sanitizeTypeName(C, Ctx);
       if (O.hasEnumPrinter && O.hasEnumPrinter(SN, C))
-        return SN + O.dbgToken + "(" + S + ", " + P + ");";
+        return SN + O.dbgPrefix + "(" + S + ", " + P + ");";
       return call1("i64f", "(vt_i64)" + P);
     }
 
@@ -179,7 +179,7 @@ namespace vtrace
           const std::string V = "__vt_p" + UID;
           QualType CP = Ctx.getPointerType(PC.withConst());
           return "{ " + declText(CP, V, Ctx, O.isC) + " = " + P + "; " +
-                 "if (" + V + ") " + SN + O.dbgToken + "(" + S + ", " + V +
+                 "if (" + V + ") " + SN + O.dbgPrefix + "(" + S + ", " + V +
                  "); else " + RT + "null(" + S + "); }";
         }
       }

@@ -1,7 +1,111 @@
+#ifdef __DBG_IMPL
 
-#ifndef __DBG_COMMON
-#define __DBG_COMMON
+#include <string>
 
+inline const std::string __dbg_bool(const bool v);
+inline const std::string __dbg_char(const char v);
+inline const std::string __dbg_short(const short v);
+inline const std::string __dbg_int(const int v);
+inline const std::string __dbg_long(const long v);
+inline const std::string __dbg_long_long(const long long v);
+inline const std::string __dbg_float(const float v);
+inline const std::string __dbg_double(const double v);
+inline const std::string __dbg_long_double(const long double v);
+inline const std::string __dbg_cstr(const char *v);
+
+#ifdef __cplusplus
+#include <vector>
+#include <sstream>
+template <typename T, typename Alloc>
+inline const std::string __dbg_vector(const std::vector<T, Alloc> &v, __dbg_printer_t printer);
+inline const std::string __dbg_addr(const void *v);
+#endif
+
+struct __dbg_Fn_arg;
+static std::string __dbg_gen_id(std::string file, int line);
+inline void __func_enter(const std::string ctx, const std::string func_name, const struct __dbg_Fn_arg args[], int args_count);
+inline void __func_exit(const std::string ctx);
+inline void __func_return(const std::string ctx, std::string type, std::string returnVal);
+inline void __var_decl(const std::string ctx, std::string name, std::string type, std::string val);
+inline void __var_change(const std::string ctx, std::string name, std::string type, std::string val, std::string oldVal);
+inline void __expr(const std::string ctx, std::string type, std::string val);
+
+#else
+#define __DBG_IMPL
+
+#include <string>
+#include <sys/time.h>
+
+// ==== Serializers =================================
+
+inline const std::string __dbg_bool(const bool v) { return v ? "true" : "false"; }
+inline const std::string __dbg_char(const char v) { return std::to_string(v); }
+inline const std::string __dbg_short(const short v) { return std::to_string(v); }
+inline const std::string __dbg_int(const int v) { return std::to_string(v); }
+inline const std::string __dbg_long(const long v) { return std::to_string(v); }
+inline const std::string __dbg_long_long(const long long v) { return std::to_string(v); }
+inline const std::string __dbg_float(const float v) { return std::to_string(v); }
+inline const std::string __dbg_double(const double v) { return std::to_string(v); }
+inline const std::string __dbg_long_double(const long double v) { return std::to_string(v); }
+inline const std::string __dbg_cstr(const char *v) { return '"' + std::string(v) + '"'; }
+inline const std::string __dbg_null(void) { return "null"; }
+inline const std::string __dbg_unsupported(void) { return "\"<unsupported>\""; }
+
+/* signature every generated per-element wrapper must match */
+typedef std::string (*__dbg_printer_t)(const void *elem);
+
+/*
+ * @param base      pointer to first element (e.g. &arr[0])
+ * @param size      sizeof(ElementType)
+ * @param n         element count
+ * @param printer   wrapper that knows how to serialize one ElementType
+ */
+inline const std::string __dbg_arr(const void *base, size_t size, size_t n, __dbg_printer_t printer)
+{
+    if (n == 0)
+        return "[]";
+
+    std::string out = "[";
+    for (size_t i = 0; i < n; ++i)
+    {
+        const unsigned char *elem = (const unsigned char *)base + i * size;
+        out += printer(elem) + (i == n - 1 ? ']' : ',');
+    }
+
+    return out;
+}
+
+#ifdef __cplusplus
+#include <vector>
+#include <sstream>
+#include <cstdint>
+template <typename T, typename Alloc>
+inline const std::string __dbg_vector(const std::vector<T, Alloc> &v, __dbg_printer_t printer)
+{
+    if (v.empty())
+        return "[]";
+
+    std::string out = "[";
+
+    for (const auto &el : v)
+        out += printer(el) + ", ";
+
+    out[out.size() - 1] = ']';
+
+    return out;
+}
+inline const std::string __dbg_addr(const void *v)
+{
+    if (!v)
+        return "nullptr";
+
+    std::ostringstream oss;
+    oss << "0x" << std::hex << reinterpret_cast<uintptr_t>(v);
+    return oss.str();
+}
+#endif
+
+// ==== Event constructors =================================
 struct __dbg_Fn_arg
 {
     std::string name;
@@ -12,28 +116,6 @@ struct __dbg_Fn_arg
     int endLine;
     int endCol;
 };
-#endif
-
-#ifdef __DBG_IMPL
-
-static std::string __dbg_gen_id(std::string file, int line);
-
-inline const std::string __dbg_fmt_ctx(std::string ctxId, std::string event,
-                                       int16_t startLine, int16_t startCol, int16_t endLine, int16_t endCol);
-
-inline void __func_enter(const std::string ctx, const std::string func_name, const struct __dbg_Fn_arg args[], int args_count);
-inline void __func_exit(const std::string ctx);
-inline void __func_return(const std::string ctx, std::string type, std::string returnVal);
-inline void __var_decl(const std::string ctx, std::string name, std::string type, std::string val);
-inline void __var_change(const std::string ctx, std::string name, std::string type, std::string val, std::string oldVal);
-inline void __expr(const std::string ctx, std::string type, std::string val);
-
-#endif
-
-#ifndef __DBG_IMPL
-#define __DBG_IMPL
-#include <sys/time.h>
-#include <string>
 
 void __dbg_emit(const std::string);
 inline std::string __dbg_escape(std::string s)

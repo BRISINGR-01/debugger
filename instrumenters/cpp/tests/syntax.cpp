@@ -68,6 +68,8 @@ static constexpr TestCase tests[] = {
     {"&i", "int *"},
     {"*pi", "int"},
 
+    {"v", "void"},
+
     // References
     {"ri", "int"},
     {"cri", "const int"},
@@ -198,6 +200,7 @@ int* pi;
 
 int& ri = i;
 const int& cri = i;
+void *v;
 
 int arr[4];
 
@@ -234,7 +237,6 @@ IntVector aliasVector;
 Nested nested;
 
 )cpp";
-
 // -----------------------------------------------------------------------------
 // Visitor
 // -----------------------------------------------------------------------------
@@ -243,7 +245,7 @@ class Visitor : public RecursiveASTVisitor<Visitor>
 {
 public:
   Visitor(ASTContext &context)
-      : context_(context), serializer(ValueSerializer(context, false)), SM(context.getSourceManager()), LO(context.getLangOpts())
+      : context_(context), serializer(ValueSerializer(context)), SM(context.getSourceManager()), LO(context.getLangOpts())
   {
   }
 
@@ -257,23 +259,8 @@ public:
       {
         QualType t = decl->getType();
         std::cout << "VisitVarDecl: " << name << std::endl;
-        std::cout << t.getAsString() << std::endl;
+        std::cout << serializer.serialize(test.expression, t) << std::endl;
         // runTest(test, expr);
-      }
-    }
-
-    return true;
-  }
-  bool VisitDeclRefExpr(DeclRefExpr *expr)
-  {
-    std::string name = expr->getNameInfo().getAsString();
-    std::cout << "VisitDeclRefExpr: " << name << std::endl;
-    // Only useful for expressions that are simple identifiers.
-    for (const auto &test : tests)
-    {
-      if (name == test.expression)
-      {
-        runTest(test, expr);
       }
     }
 

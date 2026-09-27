@@ -5,7 +5,7 @@
 
 #include "./include/utils.hpp"
 
-std::string escape(std::string s)
+const std::string escape(std::string s)
 {
     std::string out;
     out.reserve(s.size());
@@ -18,16 +18,12 @@ std::string escape(std::string s)
     return out;
 }
 
-std::string typeStr(QualType qt)
+const std::string sanitizeStr(std::string s)
 {
-    qt = qt.getUnqualifiedType().getNonReferenceType();
-
-    if (qt->isBooleanType())
-    {
-        return "short";
-    }
-
-    return qt.getAsString();
+    for (auto &c : s)
+        if (!isalnum((unsigned char)c) && c != '_')
+            c = '_';
+    return s;
 }
 
 // Get the source text of an expression (may be empty on failure).
@@ -115,21 +111,4 @@ std::string read_file(std::filesystem::path path)
     }
     out.append(buf, 0, stream.gcount());
     return out;
-}
-
-const std::vector<std::string> numbers{"_Bool", "bool", "char", "short", "int", "long", "float", "double"};
-const DebugType typeFromStr(const std::string type)
-{
-    if (std::count(numbers.cbegin(), numbers.cend(), type) != 0)
-    {
-        return DebugType::Number;
-    }
-    if (type == "void")
-        return DebugType::Void;
-
-    if (type == "std::string")
-        return DebugType::String;
-
-    std::cout << type << std::endl;
-    return DebugType::Unknown;
 }

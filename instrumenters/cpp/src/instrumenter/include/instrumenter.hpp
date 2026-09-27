@@ -21,6 +21,7 @@
 #include "./utils.hpp"
 #include "./construct_calls.hpp"
 #include "./schema.hpp"
+#include "serialize/ValueSerializer.hpp"
 
 class InstrumentVisitor : public RecursiveASTVisitor<InstrumentVisitor>
 {
@@ -48,6 +49,7 @@ private:
     ASTContext &Ctx;
     SourceManager &SM;
     const LangOptions &LO;
+    ValueSerializer serializer;
     std::vector<std::vector<std::string>> pendingStmts;
     int tempCounter_ = 0;
 
@@ -99,7 +101,5 @@ public:
 private:
     CompilerInstance &CI;
     Rewriter RW;
-    std::filesystem::path recorderDecl;
-    std::filesystem::path recorderImpl;
-    std::filesystem::path recorderCommon;
+    std::string dbgHeader;
 };

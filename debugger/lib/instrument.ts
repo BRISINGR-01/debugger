@@ -42,11 +42,24 @@ const CPPInstrumenter: Instrumenter = {
 
 		if (cxx.size === 0) return;
 
+		// console.log(`clang++ -std=c++20 ${cxx.size === 1 ? "-c" : ""} -o /dev/null \
+		//     -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
+		//     -fplugin-arg-instrumenter-${debugDir} \
+		//     ${headers
+		// 			.values()
+		// 			.map((h) => `-I${h}`)
+		// 			.toArray()
+		// 			.join(" ")} \
+		//     ${cxx
+		// 			.values()
+		// 			.map((f) => `'${f}'`)
+		// 			.toArray()
+		// 			.join(" ")}`);
+
 		execSync(
 			`clang++ -std=c++20 ${cxx.size === 1 ? "-c" : ""} -o /dev/null \
         -fplugin=${path.resolve(cppInstrumenterPath, "build", "Instrumenter.so")} \
         -fplugin-arg-instrumenter-${debugDir} \
-				-I/nix/store/hxr7dzhi9pzzg06x6z00xf0imivh7w3k-ModbusLib-unstable/include \
         ${headers
 					.values()
 					.map((h) => `-I${h}`)

@@ -1,4 +1,4 @@
-#include "instrumenter/include/instrumenter.hpp"
+#include "instrumenter.hpp"
 
 // Required by the GCC/Clang plugin loader — declares GPL compatibility.
 // Without this symbol the host compiler refuses to dlopen the plugin.

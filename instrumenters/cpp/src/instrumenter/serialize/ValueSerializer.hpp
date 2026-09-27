@@ -14,22 +14,21 @@ using namespace clang;
 class ValueSerializer
 {
 private:
-    std::set<std::string> objectsWithPrinter{};
-    std::string dbgToken = "__dbg";
-    bool isC = true;
+    std::set<std::string> printerFns{};
+    std::string dbgPrefix = "__dbg_";
     const ASTContext &Ctx;
+    bool isStd(QualType QT);
+    const std::string recordPrinter(const RecordDecl *RD);
 
 public:
-    ValueSerializer(const ASTContext &Ctx, bool isC);
+    ValueSerializer(const ASTContext &Ctx);
 
     /// Type as string that can be instrumented as code
-    const std::string sanitizeType(clang::QualType QT);
     const std::string typeToStr(QualType QT);
 
-    /// Emit C89-safe code (tag keywords on record types, no references, no
-    /// taking the address of rvalues). Auto-detected from LangOpts if you use
-    /// makeOptionsFor(Ctx).
-    bool hasPrinter(const std::string &objectName);
+    bool printerExists(const std::string objectName);
+    const std::string getPrinter(QualType type);
+    void registerIfPrinter(const FunctionDecl *FD);
 
     const std::string constructStructPrinter(RecordDecl *RD, Rewriter &RW);
     const std::string constructEnumPrinter(EnumDecl *ED, Rewriter &RW);

@@ -1,7 +1,7 @@
 #include "./include/instrumenter.hpp"
 
 InstrumentVisitor::InstrumentVisitor(Rewriter &RW, ASTContext &Ctx)
-    : RW(RW), Ctx(Ctx), SM(Ctx.getSourceManager()), LO(Ctx.getLangOpts()) {}
+    : RW(RW), Ctx(Ctx), SM(Ctx.getSourceManager()), LO(Ctx.getLangOpts()), serializer(ValueSerializer(Ctx)) {}
 
 bool InstrumentVisitor::VisitWhileStmt(WhileStmt *S)
 {
@@ -43,15 +43,12 @@ bool InstrumentVisitor::VisitRecordDecl(clang::RecordDecl *RD)
             return true;
         }
 
-        std::cout << RD->getNameAsString() << std::endl;
         // Optional: Skip standard library internal structs if you don't want them
         if (Ctx.getSourceManager().isInSystemHeader(RD->getLocation()))
         {
             // return true;
         }
     }
-
-    // std::cout << construct_c_struct_fn(RD, RW) << std::endl;
 
     return true;
 }
@@ -99,7 +96,7 @@ void InstrumentVisitor::instrumentReturn(ReturnStmt *RS, FunctionDecl *FD,
     if (!loc.has_value())
         return;
 
-    RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return_ev(*loc, RS, SM, LO));
+    RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return_ev(*loc, RS, SM, LO, serializer));
 }
 
 // Ensure a statement body is wrapped in braces (for braceless if/loop bodies).
@@ -125,14 +122,8 @@ void InstrumentVisitor::ensureBraces(Stmt *body)
 InstrumenterConsumer::InstrumenterConsumer(CompilerInstance &CI)
     : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts())
 {
-    const std::filesystem::path currFile = __FILE__;
-    const std::filesystem::path common_path = currFile.parent_path().parent_path() / "recorder" / "common.hpp";
-    const std::filesystem::path declaration_path = currFile.parent_path().parent_path() / "recorder" / "declaration.hpp";
-    const std::filesystem::path impl_path = currFile.parent_path().parent_path() / "recorder" / "implementation.cpp";
-
-    recorderCommon = read_file(common_path);
-    recorderImpl = read_file(impl_path);
-    recorderDecl = read_file(declaration_path);
+    const std::filesystem::path header = std::filesystem::path(__FILE__).parent_path().parent_path() / "recorder" / "recorder.hpp";
+    dbgHeader = read_file(header);
 }
 
 void InstrumenterConsumer::HandleTranslationUnit(ASTContext &Ctx)
@@ -142,7 +133,6 @@ void InstrumenterConsumer::HandleTranslationUnit(ASTContext &Ctx)
 
     visitor.TraverseDecl(Ctx.getTranslationUnitDecl());
 
-    bool isImplPresent = false;
     // Filter Rewriter output
     for (auto I = RW.buffer_begin(), E = RW.buffer_end(); I != E; ++I)
     {
@@ -156,7 +146,7 @@ void InstrumenterConsumer::HandleTranslationUnit(ASTContext &Ctx)
         if (!file.string().starts_with(srcRoot.string()))
             continue;
 
-        std::filesystem::path out = outputDir / file.filename();
+        const std::filesystem::path out = outputDir / file.filename();
 
         std::error_code EC;
         llvm::raw_fd_ostream os(out.c_str(), EC, llvm::sys::fs::OF_Text);
@@ -166,17 +156,7 @@ void InstrumenterConsumer::HandleTranslationUnit(ASTContext &Ctx)
             continue;
         }
 
-        os << recorderCommon << '\n';
-        if (!isImplPresent)
-        {
-            isImplPresent = true;
-            os << recorderImpl << '\n';
-        }
-        else
-        {
-            os << recorderDecl << '\n';
-        }
-
+        os << dbgHeader << '\n';
         I->second.write(os);
 
         llvm::outs() << "[instrumenter] wrote: " << out << "\n";

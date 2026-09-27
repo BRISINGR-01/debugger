@@ -3,8 +3,6 @@
 
 bool InstrumentVisitor::VisitFunctionDecl(FunctionDecl *FD)
 {
-    // std::string func1 = FD->getQualifiedNameAsString();
-    // std::cout << func1 << std::endl;
 
     if (!FD->hasBody() || !FD->isThisDeclarationADefinition()) // Only visit function definitions, skip declarations.
         return true;
@@ -14,6 +12,8 @@ bool InstrumentVisitor::VisitFunctionDecl(FunctionDecl *FD)
     Stmt *body = FD->getBody();
     if (!body)
         return true;
+
+    serializer.registerIfPrinter(FD);
 
     std::optional<Loc> location = getLoc(body->getBeginLoc(), body->getEndLoc(), SM);
     if (!location.has_value())
@@ -42,7 +42,7 @@ bool InstrumentVisitor::VisitFunctionDecl(FunctionDecl *FD)
     if (p_start.isInvalid())
         return true;
     std::string file = p_start.getFilename();
-    RW.InsertTextAfter(insertPt, construct_func_enter_ev(file, *location, func, FD, SM, LO));
+    RW.InsertTextAfter(insertPt, construct_func_enter_ev(file, *location, func, FD, SM, LO, serializer));
 
     // ── Wrap return statements ────────────────────────────────────────────
     walkForReturns(CS, FD, func);

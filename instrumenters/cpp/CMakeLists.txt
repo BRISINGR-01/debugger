@@ -52,6 +52,7 @@ add_library(${SRC} SHARED
     src/instrumenter/serialize/json.cpp
     src/instrumenter/serialize/json.hpp
 )
+target_include_directories(${SRC} PRIVATE src/instrumenter src/instrumenter/include)
 
 # clang-cpp contains the Clang libraries.
 # LLVM is explicitly linked because the shared library uses LLVM symbols.
@@ -85,7 +86,7 @@ endif()
 set(PLUGIN_NAME "Instrumenter")
 
 add_library(${PLUGIN_NAME} MODULE src/plugin.cpp)
-
+target_include_directories(${PLUGIN_NAME} PRIVATE src/instrumenter src/instrumenter/include)
 target_compile_options(${PLUGIN_NAME} PRIVATE -O0 -g)
 
 # The plugin uses the shared library above.

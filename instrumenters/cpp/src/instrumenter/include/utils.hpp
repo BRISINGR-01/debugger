@@ -44,9 +44,9 @@ enum class DebugType
     Unknown
 };
 
-std::string escape(std::string s);
+const std::string escape(std::string s);
+const std::string sanitizeStr(std::string s);
 
-std::string typeStr(QualType qt);
 // Get the source text of an expression (may be empty on failure).
 std::string exprText(const Expr *e, const SourceManager &SM,
                      const LangOptions &LO);
@@ -54,4 +54,3 @@ std::optional<Loc> getLoc(SourceLocation start, SourceLocation end, const Source
 bool shouldSkipFn(const std::string &funcName);
 std::string getLambdaVariableName(CXXMethodDecl *FD, ASTContext &Ctx);
 std::string read_file(std::filesystem::path path);
-const DebugType typeFromStr(const std::string type);
