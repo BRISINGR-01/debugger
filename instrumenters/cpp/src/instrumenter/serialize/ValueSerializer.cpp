@@ -9,7 +9,7 @@
 #include "./json.hpp"
 #include "utils.hpp"
 
-ValueSerializer::ValueSerializer(const ASTContext &Ctx) : Ctx(Ctx)
+ValueSerializer::ValueSerializer(const ASTContext &Ctx, Rewriter &RW) : Ctx(Ctx), RW(RW)
 {
   printerFns.insert("__dbg_bool");
   printerFns.insert("__dbg_char");
@@ -86,8 +86,15 @@ const std::string ValueSerializer::recordPrinter(const RecordDecl *RD)
   return dbgPrefix + sanitizeStr(RD->getQualifiedNameAsString());
 }
 
-const std::string ValueSerializer::typeToStr(QualType QT)
+const std::string ValueSerializer::typeToStr(QualType QT, bool pretty)
 {
+  if (!pretty)
+  {
+    QT = QT.getCanonicalType();
+    if (QT.isNull())
+      return "null";
+  }
+
   if (QT.isNull())
     return "null";
   QT = QT.getNonReferenceType();
@@ -103,15 +110,14 @@ const std::string ValueSerializer::typeToStr(QualType QT)
   return QT.getAsString();
 }
 
-bool ValueSerializer::printerExists(const std::string objectName)
+bool ValueSerializer::printerExists(const std::string printer)
 {
-  return printerFns.contains(sanitizeStr(objectName));
+  return !printer.empty() && printerFns.contains(sanitizeStr(printer));
 }
 
 const std::string ValueSerializer::getPrinter(QualType type)
 {
   type = type.getCanonicalType().getUnqualifiedType();
-  std::cout << typeToStr(type) << std::endl;
 
   if (type->isReferenceType())
     return getPrinter(type->getPointeeType());
@@ -236,125 +242,192 @@ void ValueSerializer::registerIfPrinter(const FunctionDecl *FD)
   printerFns.insert(func);
 }
 
-const std::string ValueSerializer::constructStructPrinter(RecordDecl *RD, Rewriter &RW)
+void ValueSerializer::constructStructPrinter(RecordDecl *RD, Rewriter &RW)
 {
-  std::string name = RD->getNameAsString();
-  const std::string printer = recordPrinter(RD);
-  printerFns.insert(printer);
+  const DeclContext *DC = RD->getDeclContext();
+  if (DC->isFunctionOrMethod())
+    return;
 
-  std::ostringstream fn;
-  fn << "inline std::string " << printer << "(const " << name << " &v) {\n  return ";
+  const RecordDecl *Outer = RD;
+  while (const auto *P = dyn_cast<RecordDecl>(Outer->getDeclContext()))
+    Outer = P;
+
+  SourceLocation end = Outer->getEndLoc(); // the closing '}'
+  if (end.isInvalid() || end.isMacroID())
+    return; // can't rewrite reliably
+
+  // step past the ';' (or a declarator: `struct {..} foo;`)
+  SourceLocation after = Lexer::findLocationAfterToken(
+      end, tok::semi, Ctx.getSourceManager(), Ctx.getLangOpts(),
+      /*SkipTrailingWhitespaceAndNewLine=*/true);
+  if (after.isInvalid())
+    return;
+
+  const std::string printer = recordPrinter(RD);
+  if (!printerFns.insert(printer).second)
+    return;
+
+  // Nested types need qualification relative to the insertion scope:
+  // after the outer record we are in the outer's enclosing namespace, so
+  // "Outer::Inner" is correct; for top-level records it is just the name.
+  std::string typeRef = RD->getName().str();
+  for (const auto *P = dyn_cast<RecordDecl>(RD->getDeclContext()); P;
+       P = dyn_cast<RecordDecl>(P->getDeclContext()))
+    typeRef = P->getName().str() + "::" + typeRef;
+
+  const bool isCXX = Ctx.getLangOpts().CPlusPlus;
+  std::string param = isCXX ? "const " + typeRef + " &v"
+                            : "const " + typeRef + " *pv"; // C: no refs
+  std::string self = isCXX ? "v." : "pv->";
 
   jsonStr json;
   for (const FieldDecl *FD : RD->fields())
   {
-    std::string name = FD->getNameAsString();
-    std::string accessExpr = "v." + name;
+    if (FD->getIdentifier() == nullptr)
+      continue; // anonymous struct/union member
+    std::string fname = FD->getNameAsString();
+    std::string access = self + fname;
     if (FD->isBitField())
-      accessExpr = "(long long)(" + accessExpr + ")";
-
-    json.addKeyVal(name, serialize(accessExpr, FD->getType()));
+      access = "(long long)(" + access + ")";
+    json.addKeyVal(fname, serialize(access, FD->getType()));
   }
 
-  fn << json.str() << ";";
+  std::ostringstream fn;
+  fn << "\nstatic inline std::string " << printer << "(" << param << ")\n{\n"
+     << "  return " << json.str() << ";\n}\n";
 
-  return fn.str();
+  RW.InsertTextAfter(after, fn.str());
 }
 
-const std::string ValueSerializer::constructEnumPrinter(EnumDecl *ED, Rewriter &RW)
+void ValueSerializer::constructEnumPrinter(EnumDecl *ED, Rewriter &RW)
 {
-  // Skip enums nested in uninstantiated templates: getQualifiedNameAsString()
-  // may embed unresolved template parameter text there, which isn't valid
-  // as a standalone type reference.
-  if (ED->isTemplated() || ED->getDeclContext()->isDependentContext())
-    return {};
+  // enums in uninstantiated templates or function-local scopes: skip
+  // (can't define a free function inside a function; dependent names aren't writable)
+  const DeclContext *DC = ED->getDeclContext();
+  if (DC->isFunctionOrMethod() || DC->isDependentContext())
+    return;
 
-  // --- resolve a name usable as a type reference (typeRefName) ---
-  // and a name usable as a stable lookup/suffix key (keySource) ---
-  std::string typeRefName;
-  std::string keySource;
-
-  if (ED->getIdentifier() != nullptr)
+  // --- names ---
+  std::string typeRef, keySource;
+  if (ED->getIdentifier())
   {
-    // Unqualified name is always safe to use as the type reference:
-    // the generated printer lives in the same TU as ED, so normal
-    // unqualified lookup finds it even inside an anonymous namespace
-    // or nested scope (C++ resolves this positionally; qualifying
-    // with "(anonymous namespace)::" is not valid syntax and unneeded).
-    typeRefName = ED->getNameAsString();
-    // Qualified name for the key: still unique across namespaces/
-    // nested classes, and stable even if two anonymous namespaces in
-    // different files both declare "Color".
+    typeRef = ED->getName().str();
     keySource = ED->getQualifiedNameAsString();
   }
   else if (const TypedefNameDecl *TD = ED->getTypedefNameForAnonDecl())
   {
-    // typedef enum { ... } Foo;  (common in C, legal in C++ too)
-    typeRefName = TD->getNameAsString();
+    typeRef = TD->getName().str();
     keySource = TD->getQualifiedNameAsString();
   }
   else
-  {
-    return {}; // genuinely anonymous, unnamed enum: no printer possible
-  }
+    return;
 
-  std::string printer = dbgPrefix + "_" + sanitizeStr(keySource);
+  // Enclosing records: qualify relative to the insertion scope, which is
+  // the scope containing the OUTERMOST record (or the enum itself if top-level).
+  const RecordDecl *Outer = nullptr;
+  for (const DeclContext *P = ED->getDeclContext(); P; P = P->getParent())
+    if (const auto *R = dyn_cast<RecordDecl>(P))
+      Outer = R; // keeps walking up; ends at outermost
 
-  // In C++11 unscoped/scoped enums both support `EnumName::Enumerator`
-  // qualification, but plain C enums inject enumerators into the
-  // enclosing scope unqualified — "Color::Red" is not valid C.
-  bool qualifyEnumerators = Ctx.getLangOpts().CPlusPlus;
+  std::string qualifier; // "Outer::Mid::"
+  for (const DeclContext *P = ED->getDeclContext(); P; P = P->getParent())
+    if (const auto *R = dyn_cast<RecordDecl>(P))
+      qualifier = R->getName().str() + "::" + qualifier;
+  if (!Outer && !ED->getIdentifier())
+    qualifier.clear();
+  std::string fullRef = qualifier + typeRef;
 
+  // A private enum nested in a class can't be named from a free function.
+  if (Outer && ED->getAccess() != AS_public && ED->getAccess() != AS_none)
+    return;
+
+  // --- insertion point ---
+  const Decl *anchor = Outer ? static_cast<const Decl *>(Outer)
+                             : static_cast<const Decl *>(ED);
+  SourceLocation end = anchor->getEndLoc();
+  if (end.isInvalid() || end.isMacroID())
+    return;
+  SourceLocation after = Lexer::findLocationAfterToken(
+      end, tok::semi, Ctx.getSourceManager(), Ctx.getLangOpts(), true);
+  if (after.isInvalid())
+    return;
+
+  // --- dedupe / register ---
+  const std::string printer = dbgPrefix + sanitizeStr(keySource);
+  if (!printerFns.insert(printer).second)
+    return;
+
+  // --- body ---
+  const bool isCXX = Ctx.getLangOpts().CPlusPlus;
+  // Reference form is valid for both scoped and unscoped enums in C++11+;
+  // C has no `::`, and enumerators live in the enclosing scope.
+  // Enumerators of a C++ enum nested in a class are qualified by the class,
+  // not the enum, for unscoped enums, so both spellings are covered by
+  // qualifying with the enum name (valid since C++11).
   std::ostringstream fn;
-  fn << "static inline std::string " << printer << "(const " << typeRefName << " v) {\n  switch (v) {\n";
+  fn << "\nstatic inline std::string " << printer << "(" << fullRef << " v)\n{\n"
+     << "  switch (v)\n    {\n";
 
   for (const EnumConstantDecl *EC : ED->enumerators())
   {
-    std::string enumeratorName = EC->getNameAsString();
-    std::string caseLabel = qualifyEnumerators
-                                ? (typeRefName + "::" + enumeratorName)
-                                : enumeratorName;
-    fn << "  case " << caseLabel << ": return \"" << enumeratorName << "\";\n";
+    std::string n = EC->getNameAsString();
+    std::string label = isCXX ? (fullRef + "::" + n) : n;
+    fn << "  case " << label << ": return \"\\\"" << label << "\\\"\";\n";
   }
 
-  fn << "  default: return __dbg_unsupported();\n} }\n";
-  printerFns.insert(printer);
-  return fn.str();
+  fn << "  default: return __dbg_unsupported();\n    }\n}\n";
+
+  RW.InsertTextAfter(after, fn.str());
 }
 
 const std::string ValueSerializer::serialize(const std::string expr, QualType T)
 {
-  std::cout << typeToStr(T) << std::endl;
   if (T->isReferenceType())
     return serialize(expr, T->getPointeeType());
 
+  const std::string unsupported = "\"\\\"<" + typeToStr(T) + ">\\\"\"";
+
+  static constexpr uint64_t kMaxUnrolled = 16; // cap generated code size
+
   if (const ArrayType *AT = T->getAsArrayTypeUnsafe())
   {
-    QualType elemT = AT->getElementType().getUnqualifiedType();
+    QualType elemT = AT->getElementType();
 
-    if (elemT->isCharType())
+    // char[N] is a string; char[N][M] recurses below as an array of strings
+    if (elemT.getCanonicalType().getUnqualifiedType()->isCharType())
       return dbgPrefix + "cstr(" + expr + ")";
 
-    std::string printer = getPrinter(elemT);
-    if (!printerExists(printer))
-      return "\"<" + typeToStr(T) + ">\"";
-
-    std::string elemSize = "sizeof(" + typeToStr(elemT) + ")";
-
-    if (const auto *CAT = dyn_cast<ConstantArrayType>(AT))
+    const auto *CAT = dyn_cast<ConstantArrayType>(AT);
+    if (!CAT)
     {
-      llvm::SmallString<32> size;
-      CAT->getSize().toString(size, /*Radix=*/10, /*Signed=*/false);
-      return dbgPrefix + "arr(" + expr + ", " + elemSize + ", " + size.str().str() + ", " + printer + ")";
+      if (!isa<VariableArrayType>(AT))
+        return unsupported;
+
+      static unsigned tmpId = 0;
+      const std::string id = std::to_string(tmpId++);
+      const std::string n = "__dbg_n" + id;
+      const std::string sh = "__dbg_s" + id;
+      const std::string i = "__dbg_i" + id;
+      const std::string out = "__dbg_o" + id;
+      const std::string cap = std::to_string(kMaxUnrolled);
+
+      return "({ size_t " + n + " = sizeof(" + expr + ") / sizeof((" + expr + ")[0]); size_t " +
+             sh + " = " + n + " < " + cap + " ? " + n + " : " + cap + "; std::string " +
+             out + " = \"[\"; for (size_t " + i + " = 0; " + i + " < " + sh + "; ++" + i + ") { if (" +
+             i + ") " + out + " += \", \"; " + out + " += " +
+             serialize("(" + expr + ")[" + i + "]", elemT) + "; }  if (" +
+             n + " > " + sh + ") " + out + " += (" + sh + " ? \", ...\" : \"...\"); " +
+             out + " += \"]\"; " + out + "; })";
     }
 
-    if (isa<VariableArrayType>(AT))
-    {
-      std::string size = "(sizeof(" + expr + ") / sizeof((" + expr + ")[0]))";
-      return dbgPrefix + "arr(" + expr + ", " + elemSize + ", " + size + ", " + printer + ")";
-    }
+    uint64_t total = CAT->getSize().getZExtValue();
+    uint64_t shown = std::min(total, kMaxUnrolled);
 
-    return "\"<" + typeToStr(T) + ">\"";
+    std::string call = dbgPrefix + "arr(" + std::to_string(total) + ", " +
+                       std::to_string(shown);
+    for (uint64_t i = 0; i < shown; ++i)
+      call += ", " + serialize("(" + expr + ")[" + std::to_string(i) + "]", elemT);
+    return call + ")";
   }
 
   if (T->isPointerType())
@@ -376,6 +449,10 @@ const std::string ValueSerializer::serialize(const std::string expr, QualType T)
   {
     const std::string name = sanitizeStr(ET->getDecl()->getQualifiedNameAsString());
     const std::string printer = dbgPrefix + name;
+    const EnumDecl *ED = ET->getDecl()->getDefinition();
+    if (ED && !printerExists(printer))
+      constructEnumPrinter(const_cast<EnumDecl *>(ED), RW); // builds + registers
+
     if (printerExists(printer))
       return printer + "(" + expr + ")";
 
@@ -394,12 +471,12 @@ const std::string ValueSerializer::serialize(const std::string expr, QualType T)
     if (printerExists(printer))
       return printer + "(" + expr + ")";
 
-    return "\"<" + typeToStr(T) + ">\"";
+    return unsupported;
   }
 
   const std::string printer = getPrinter(T);
   if (printerExists(printer))
     return printer + "(" + expr + ")";
 
-  return "\"<" + typeToStr(T) + ">\"";
+  return unsupported;
 }

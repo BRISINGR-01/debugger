@@ -54,25 +54,24 @@ inline const std::string __dbg_unsupported(void) { return "\"<unsupported>\""; }
 /* signature every generated per-element wrapper must match */
 typedef std::string (*__dbg_printer_t)(const void *elem);
 
-/*
- * @param base      pointer to first element (e.g. &arr[0])
- * @param size      sizeof(ElementType)
- * @param n         element count
- * @param printer   wrapper that knows how to serialize one ElementType
- */
-inline const std::string __dbg_arr(const void *base, size_t size, size_t n, __dbg_printer_t printer)
+// fixed-size arrays: every element is already expanded at the call site
+template <typename... Parts>
+inline std::string __dbg_arr(std::size_t total, std::size_t shown, Parts &&...parts)
 {
-    if (n == 0)
-        return "[]";
-
     std::string out = "[";
-    for (size_t i = 0; i < n; ++i)
+    bool first = true;
+    auto add = [&](const std::string &p)
     {
-        const unsigned char *elem = (const unsigned char *)base + i * size;
-        out += printer(elem) + (i == n - 1 ? ']' : ',');
-    }
+        if (!first)
+            out += ", ";
+        first = false;
+        out += p;
+    };
+    (add(std::string(std::forward<Parts>(parts))), ...); // no-op for an empty pack
 
-    return out;
+    if (total > shown)
+        out += first ? "..." : ", ...";
+    return out + "]";
 }
 
 #ifdef __cplusplus

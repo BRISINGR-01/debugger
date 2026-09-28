@@ -60,6 +60,14 @@ struct ComplexTest : public Base
     // 4. Pointers & References (Address-only raw capture)
     const char *label; // Offset 56 (64-bit pointer)
     int32_t *dynamic_buffer;
+
+    enum Clarity
+    {
+        Unclear,
+        Clear
+    };
+
+    Clarity cl;
 };
 
 // ── Class with methods ────────────────────────────────────────────────────
@@ -126,6 +134,9 @@ int main()
     st.d = 8;
     auto a = st;
     int i = 9;
+    int ii[i];
+    memset(ii, 11, i * sizeof(int));
+
     ComplexTest ct{
         {12, true},
         12,
@@ -138,6 +149,7 @@ int main()
         8,
         "ptr",
         &i,
+        ComplexTest::Clarity::Clear,
     };
     // int a = 9, b, cc = -1;
     // a++;

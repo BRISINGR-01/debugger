@@ -100,7 +100,7 @@ const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD, ValueSerializer &
 
 const std::string construct_var_assign(const QualType type, const std::string name, const std::string expr, ValueSerializer &serializer)
 {
-    return serializer.typeToStr(type) + " " + name + " = " + expr + ";\n";
+    return serializer.typeToStr(type, false) + " " + name + " = " + expr + ";\n";
 }
 
 const std::string construct_expr_ev(Loc &loc, const QualType type, const std::string tmpVarName, ValueSerializer &serializer)
@@ -121,4 +121,24 @@ const std::string construct_assign_ev(Loc &loc, const QualType type, const std::
     os << ", \"" << name << "\", \"" << serializer.typeToStr(type) << "\", " << serializer.serialize(tmpVarName, type) << ", " << serializer.serialize(oldVarName, type) << ");\n";
 
     return os.str();
+}
+
+const std::string construct_serializer_header(ValueSerializer &serializer)
+{
+    std::stringstream out;
+    out << "#ifdef __DBG_SERIALIZERS\n";
+    for (auto &&printer : serializer.customPrinterSignatures)
+    {
+        out << printer << ";\n";
+    }
+
+    out << "#else\n#define __DBG_SERIALIZERS\n";
+
+    for (auto &&printer : serializer.customPrinterFnImpls)
+    {
+        out << printer << '\n';
+    }
+    out << "#endif\n";
+
+    return out.str();
 }

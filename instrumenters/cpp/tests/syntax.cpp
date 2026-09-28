@@ -245,7 +245,7 @@ class Visitor : public RecursiveASTVisitor<Visitor>
 {
 public:
   Visitor(ASTContext &context)
-      : context_(context), serializer(ValueSerializer(context)), SM(context.getSourceManager()), LO(context.getLangOpts())
+      : context_(context), RW(context.getSourceManager(), context.getLangOpts()), serializer(ValueSerializer(context, RW)), SM(context.getSourceManager()), LO(context.getLangOpts())
   {
   }
 
@@ -271,6 +271,7 @@ private:
   ASTContext &context_;
   ValueSerializer serializer;
   SourceManager &SM;
+  Rewriter RW;
   const LangOptions &LO;
 
   void runTest(const TestCase &test, Expr *expr)

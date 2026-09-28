@@ -76,3 +76,49 @@ bool InstrumentVisitor::VisitLambdaExpr(LambdaExpr *LE)
 
     return VisitFunctionDecl(FD);
 }
+
+// Walk all ReturnStmts inside a FunctionDecl body and insert recorder call.
+// We do a recursive walk manually since the visitor top-level call
+// might descend into nested lambdas. We only want returns at this
+// function level.
+void InstrumentVisitor::walkForReturns(Stmt *S, FunctionDecl *FD, const std::string &fname)
+{
+    if (!S)
+        return;
+
+    // Don't descend into nested lambdas/function bodies
+    if (isa<LambdaExpr>(S))
+        return;
+
+    if (ReturnStmt *RS = dyn_cast<ReturnStmt>(S))
+    {
+        instrumentReturn(RS, FD, fname);
+        return;
+    }
+
+    for (Stmt *child : S->children())
+    {
+        walkForReturns(child, FD, fname);
+    }
+}
+void InstrumentVisitor::instrumentReturn(ReturnStmt *RS, FunctionDecl *FD,
+                                         const std::string &fname)
+{
+    Expr *RetExpr = RS->getRetValue();
+    if (!RetExpr)
+    {
+        // e.g. `return;`
+        std::optional<Loc> loc = getLoc(RS->getBeginLoc(), RS->getEndLoc(), SM);
+        if (!loc.has_value())
+            return;
+
+        RW.InsertTextBefore(RS->getBeginLoc(), construct_func_exit_ev(*loc));
+        return;
+    }
+
+    std::optional<Loc> loc = getLoc(RetExpr->getBeginLoc(), Lexer::getLocForEndOfToken(RetExpr->getEndLoc(), 0, SM, LO), SM);
+    if (!loc.has_value())
+        return;
+
+    RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return_ev(*loc, RS, SM, LO, serializer));
+}

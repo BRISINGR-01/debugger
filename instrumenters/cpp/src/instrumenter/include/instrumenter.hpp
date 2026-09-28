@@ -26,7 +26,7 @@
 class InstrumentVisitor : public RecursiveASTVisitor<InstrumentVisitor>
 {
 public:
-    explicit InstrumentVisitor(Rewriter &RW, ASTContext &Ctx);
+    explicit InstrumentVisitor(Rewriter &RW, ASTContext &Ctx, ValueSerializer &serializer);
 
     // ── Functions ─────────────────────────────────────────────────────────────
     bool VisitFunctionDecl(FunctionDecl *FD);
@@ -43,13 +43,14 @@ public:
     bool VisitForStmt(ForStmt *S);
     bool VisitCXXForRangeStmt(CXXForRangeStmt *S);
     bool VisitRecordDecl(clang::RecordDecl *D);
+    bool VisitEnumDecl(clang::EnumDecl *ED);
 
 private:
     Rewriter &RW;
     ASTContext &Ctx;
     SourceManager &SM;
+    ValueSerializer &serializer;
     const LangOptions &LO;
-    ValueSerializer serializer;
     std::vector<std::vector<std::string>> pendingStmts;
     int tempCounter_ = 0;
 
@@ -101,5 +102,6 @@ public:
 private:
     CompilerInstance &CI;
     Rewriter RW;
+    ValueSerializer serializer;
     std::string dbgHeader;
 };

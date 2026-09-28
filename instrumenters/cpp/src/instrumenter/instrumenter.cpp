@@ -1,7 +1,7 @@
 #include "./include/instrumenter.hpp"
 
-InstrumentVisitor::InstrumentVisitor(Rewriter &RW, ASTContext &Ctx)
-    : RW(RW), Ctx(Ctx), SM(Ctx.getSourceManager()), LO(Ctx.getLangOpts()), serializer(ValueSerializer(Ctx)) {}
+InstrumentVisitor::InstrumentVisitor(Rewriter &RW, ASTContext &Ctx, ValueSerializer &serializer)
+    : RW(RW), Ctx(Ctx), SM(Ctx.getSourceManager()), LO(Ctx.getLangOpts()), serializer(serializer) {}
 
 bool InstrumentVisitor::VisitWhileStmt(WhileStmt *S)
 {
@@ -30,7 +30,10 @@ bool InstrumentVisitor::VisitCXXForRangeStmt(CXXForRangeStmt *S)
 bool InstrumentVisitor::VisitRecordDecl(clang::RecordDecl *RD)
 {
     // Only inspect definitions of structs/classes
-    if (!RD->isCompleteDefinition() || !RD->isStruct() || !RD->getDefinition())
+    if (!RD->isCompleteDefinition() || RD->isImplicit() || !RD->getDefinition() || RD->getNameAsString().starts_with("_"))
+        return true;
+
+    if (RD->getIdentifier() == nullptr && !RD->getTypedefNameForAnonDecl())
         return true;
 
     // 2. Handle C++ specific template constraints
@@ -39,64 +42,40 @@ bool InstrumentVisitor::VisitRecordDecl(clang::RecordDecl *RD)
         // Skip template definitions that aren't concrete instantiations
         if (CXXRD->isDependentType() ||
             CXXRD->getDescribedClassTemplate() != nullptr)
-        {
             return true;
-        }
-
-        // Optional: Skip standard library internal structs if you don't want them
-        if (Ctx.getSourceManager().isInSystemHeader(RD->getLocation()))
-        {
-            // return true;
-        }
     }
+
+    // Skip standard library internal structs if you don't want them
+    SourceLocation Loc = RD->getLocation();
+    SourceManager &SM = Ctx.getSourceManager();
+    if (SM.isInSystemHeader(Loc) || SM.isInSystemHeader(SM.getSpellingLoc(Loc)))
+        return true;
+
+    // if (isa<ClassTemplateSpecializationDecl>(RD))
+    //     return true; // skip all instantiations/specializations of class templates
+
+    serializer.constructStructPrinter(RD, RW);
 
     return true;
 }
 
-// Walk all ReturnStmts inside a FunctionDecl body and insert recorder call.
-// We do a recursive walk manually since the visitor top-level call
-// might descend into nested lambdas. We only want returns at this
-// function level.
-void InstrumentVisitor::walkForReturns(Stmt *S, FunctionDecl *FD, const std::string &fname)
+bool InstrumentVisitor::VisitEnumDecl(clang::EnumDecl *ED)
 {
-    if (!S)
-        return;
+    // Skip enums nested in uninstantiated templates: getQualifiedNameAsString()
+    // may embed unresolved template parameter text there, which isn't valid
+    // as a standalone type reference.
+    if (ED->isTemplated() || ED->getDeclContext()->isDependentContext())
+        return true;
 
-    // Don't descend into nested lambdas/function bodies
-    if (isa<LambdaExpr>(S))
-        return;
+    // Skip standard library internal structs if you don't want them
+    SourceLocation Loc = ED->getLocation();
+    SourceManager &SM = Ctx.getSourceManager();
+    if (SM.isInSystemHeader(Loc) || SM.isInSystemHeader(SM.getSpellingLoc(Loc)))
+        return true;
 
-    if (ReturnStmt *RS = dyn_cast<ReturnStmt>(S))
-    {
-        instrumentReturn(RS, FD, fname);
-        return;
-    }
+    serializer.constructEnumPrinter(ED, RW);
 
-    for (Stmt *child : S->children())
-    {
-        walkForReturns(child, FD, fname);
-    }
-}
-void InstrumentVisitor::instrumentReturn(ReturnStmt *RS, FunctionDecl *FD,
-                                         const std::string &fname)
-{
-    Expr *RetExpr = RS->getRetValue();
-    if (!RetExpr)
-    {
-        // e.g. `return;`
-        std::optional<Loc> loc = getLoc(RS->getBeginLoc(), RS->getEndLoc(), SM);
-        if (!loc.has_value())
-            return;
-
-        RW.InsertTextBefore(RS->getBeginLoc(), construct_func_exit_ev(*loc));
-        return;
-    }
-
-    std::optional<Loc> loc = getLoc(RetExpr->getBeginLoc(), Lexer::getLocForEndOfToken(RetExpr->getEndLoc(), 0, SM, LO), SM);
-    if (!loc.has_value())
-        return;
-
-    RW.InsertTextBefore(RS->getBeginLoc(), construct_func_return_ev(*loc, RS, SM, LO, serializer));
+    return true;
 }
 
 // Ensure a statement body is wrapped in braces (for braceless if/loop bodies).
@@ -120,7 +99,7 @@ void InstrumentVisitor::ensureBraces(Stmt *body)
 }
 
 InstrumenterConsumer::InstrumenterConsumer(CompilerInstance &CI)
-    : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts())
+    : CI(CI), RW(CI.getSourceManager(), CI.getLangOpts()), serializer(ValueSerializer(CI.getASTContext(), RW))
 {
     const std::filesystem::path header = std::filesystem::path(__FILE__).parent_path().parent_path() / "recorder" / "recorder.hpp";
     dbgHeader = read_file(header);
@@ -129,7 +108,7 @@ InstrumenterConsumer::InstrumenterConsumer(CompilerInstance &CI)
 void InstrumenterConsumer::HandleTranslationUnit(ASTContext &Ctx)
 {
     SourceManager &SM = Ctx.getSourceManager();
-    InstrumentVisitor visitor(RW, Ctx);
+    InstrumentVisitor visitor(RW, Ctx, serializer);
 
     visitor.TraverseDecl(Ctx.getTranslationUnitDecl());
 
@@ -156,7 +135,8 @@ void InstrumenterConsumer::HandleTranslationUnit(ASTContext &Ctx)
             continue;
         }
 
-        os << dbgHeader << '\n';
+        os << dbgHeader << '\n'
+           << construct_serializer_header(serializer) << '\n';
         I->second.write(os);
 
         llvm::outs() << "[instrumenter] wrote: " << out << "\n";

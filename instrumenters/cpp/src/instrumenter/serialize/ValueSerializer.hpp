@@ -15,23 +15,26 @@ class ValueSerializer
 {
 private:
     std::set<std::string> printerFns{};
-    std::string dbgPrefix = "__dbg_";
     const ASTContext &Ctx;
+    Rewriter &RW;
     bool isStd(QualType QT);
     const std::string recordPrinter(const RecordDecl *RD);
 
 public:
-    ValueSerializer(const ASTContext &Ctx);
+    std::set<std::string> customPrinterSignatures{};
+    std::set<std::string> customPrinterFnImpls{};
+    std::string dbgPrefix = "__dbg_";
+    ValueSerializer(const ASTContext &Ctx, Rewriter &RW);
 
     /// Type as string that can be instrumented as code
-    const std::string typeToStr(QualType QT);
+    const std::string typeToStr(QualType QT, bool pretty = true);
 
     bool printerExists(const std::string objectName);
     const std::string getPrinter(QualType type);
     void registerIfPrinter(const FunctionDecl *FD);
 
-    const std::string constructStructPrinter(RecordDecl *RD, Rewriter &RW);
-    const std::string constructEnumPrinter(EnumDecl *ED, Rewriter &RW);
+    void constructStructPrinter(RecordDecl *RD, Rewriter &RW);
+    void constructEnumPrinter(EnumDecl *ED, Rewriter &RW);
     // const std::string constructUnionPrinter(UnionDecl *ED, Rewriter &RW);
 
     const std::string serialize(const std::string expr, QualType type);

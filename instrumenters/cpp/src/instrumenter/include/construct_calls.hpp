@@ -13,3 +13,5 @@ const std::string construct_var_assign(const QualType type, const std::string na
 const std::string construct_assign_ev(Loc &loc, const QualType type, const std::string name, const std::string oldVarName, const std::string tmpVarName, ValueSerializer &serializer);
 const std::string construct_var_decl_ev(Loc &loc, VarDecl *VD, ValueSerializer &serializer);
 const std::string construct_expr_ev(Loc &loc, const QualType type, const std::string tmpVarName, ValueSerializer &serializer);
+
+const std::string construct_serializer_header(ValueSerializer &serializer);
